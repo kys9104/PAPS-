@@ -1,0 +1,6 @@
+{
+  "name": "신안해양과학고 1학년 체력 증진 및 종합적 관리 시스템",
+  "description": "2022 개정 교육과정 기반 신안해양과학고등학교 1학년 체육 수업을 위한 PAPS 등급 자동 판정, 37명 전교생 체력 기록실, 생활기록부 세특 생성기 및 FITT 운동 처방 플랫폼",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

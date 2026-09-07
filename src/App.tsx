@@ -22,7 +22,8 @@ import {
   setTeacherAuthenticated,
   deletePapsRecord,
   deleteWorkoutLog,
-  getTeacherSettings
+  getTeacherSettings,
+  getAllStudents
 } from './services/storageService';
 import { Header } from './components/Header';
 import { AuthModal } from './components/AuthModal';
@@ -37,6 +38,8 @@ import { ExerciseGuideTab } from './components/ExerciseGuideTab';
 import { TimerTab } from './components/TimerTab';
 import { NeisTab } from './components/NeisTab';
 import { AllStudentsTab } from './components/AllStudentsTab';
+import { LoginView } from './components/LoginView';
+import { GasSettingsModal } from './components/GasSettingsModal';
 import { Waves } from 'lucide-react';
 
 export default function App() {
@@ -50,12 +53,22 @@ export default function App() {
   const [lessonPlans, setLessonPlans] = useState<LessonPlan[]>([]);
   const [workoutLogs, setWorkoutLogs] = useState<WorkoutLog[]>([]);
 
+  // First Screen Login Gate (학생/교사 인증 상태)
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
+    // 만약 기존 세션이 있다면 복원, 없으면 첫 화면 로그인 표시
+    return Boolean(getCurrentStudent() || isTeacherAuthenticated());
+  });
+
   // Modals & Teacher Auth
   const [isAuthOpen, setIsAuthOpen] = useState<boolean>(false);
   const [isTeacherModalOpen, setIsTeacherModalOpen] = useState<boolean>(false);
   const [isTeacher, setIsTeacher] = useState<boolean>(() => isTeacherAuthenticated());
   const [isTeacherLoginOpen, setIsTeacherLoginOpen] = useState<boolean>(false);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState<boolean>(false);
+  const [isGasSettingsOpen, setIsGasSettingsOpen] = useState<boolean>(false);
+
+  // FITT to Interval Timer link state
+  const [appliedLessonPlan, setAppliedLessonPlan] = useState<LessonPlan | null>(null);
 
   // Timer cross-navigation params
   const [timerExercise, setTimerExercise] = useState<{ name: string; category: string }>({
@@ -85,7 +98,7 @@ export default function App() {
         studentNum: 1,
         name: '곽승준',
         gender: '남',
-        pin: '1234',
+        pin: '0000',
         joinedAt: new Date().toISOString(),
         lastLoginAt: new Date().toISOString()
       };
@@ -184,24 +197,49 @@ export default function App() {
     refreshStudentData(activeStudent);
   }, []);
 
+  const handleStudentLoginFromView = (selectedStudent: StudentProfile) => {
+    setCurrentStudent(selectedStudent);
+    refreshStudentData(selectedStudent);
+    setIsTeacher(false);
+    setTeacherAuthenticated(false);
+    setIsLoggedIn(true);
+    setCurrentTab('dashboard');
+  };
+
+  const handleTeacherLoginFromView = () => {
+    setIsTeacher(true);
+    setTeacherAuthenticated(true);
+    let activeStudent = getCurrentStudent();
+    if (!activeStudent) {
+      const all = getAllStudents();
+      if (all.length > 0) {
+        activeStudent = all[0];
+        setCurrentStudent(activeStudent);
+        refreshStudentData(activeStudent);
+      }
+    }
+    setIsLoggedIn(true);
+    setCurrentTab('all-students');
+  };
+
   const handleAuthSuccess = (authenticatedStudent: StudentProfile) => {
     refreshStudentData(authenticatedStudent);
+    setIsLoggedIn(true);
   };
 
   const handleLogout = () => {
     setCurrentStudent(null);
     setStudent(null);
-    setPapsRecords([]);
-    setFittPlan(null);
-    setLessonPlans([]);
-    setWorkoutLogs([]);
-    setIsAuthOpen(true);
+    setIsTeacher(false);
+    setTeacherAuthenticated(false);
+    setIsLoggedIn(false);
   };
 
   const handleTeacherLogout = () => {
     setTeacherAuthenticated(false);
     setIsTeacher(false);
     setIsTeacherModalOpen(false);
+    setIsLoggedIn(false);
   };
 
   const handleTeacherLoginSuccess = () => {
@@ -227,6 +265,16 @@ export default function App() {
     await deletePapsRecord(recordId);
     setPapsRecords(getStudentPapsRecords(student.id));
   };
+
+  // 첫 화면 로그인 게이트: 로그인되지 않은 경우 Split LoginView 렌더링
+  if (!isLoggedIn) {
+    return (
+      <LoginView
+        onStudentLogin={handleStudentLoginFromView}
+        onTeacherLogin={handleTeacherLoginFromView}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#070e1e] text-white flex flex-col font-sans selection:bg-[#E8FD3B] selection:text-black">
@@ -259,6 +307,7 @@ export default function App() {
             refreshStudentData(selected);
           }}
           onOpenTeacherModal={() => setIsTeacherModalOpen(true)}
+          onOpenGasSettings={() => setIsGasSettingsOpen(true)}
           onDataChanged={() => {
             if (student) refreshStudentData(student);
           }}
@@ -306,6 +355,10 @@ export default function App() {
             onUpdateFittPlan={(plan) => setFittPlan(plan)}
             onUpdateLessonPlans={(plans) => setLessonPlans(plans)}
             onOpenAuth={() => setIsAuthOpen(true)}
+            onApplyToIntervalTimer={(lesson) => {
+              setAppliedLessonPlan(lesson);
+              setCurrentTab('timer');
+            }}
           />
         )}
 
@@ -343,6 +396,7 @@ export default function App() {
           <TimerTab
             student={student}
             lessonPlans={lessonPlans}
+            appliedLessonPlan={appliedLessonPlan}
             initialExerciseName={timerExercise.name}
             initialCategory={timerExercise.category}
             onWorkoutLogged={(log) => setWorkoutLogs((prev) => [log, ...prev])}
@@ -372,7 +426,7 @@ export default function App() {
         />
       )}
 
-      {/* Teacher Authentication Modal (비밀번호: 4161) */}
+      {/* Teacher Authentication Modal */}
       <TeacherLoginModal
         isOpen={isTeacherLoginOpen}
         onClose={() => setIsTeacherLoginOpen(false)}
@@ -387,6 +441,12 @@ export default function App() {
         onSelectStudent={handleAuthSuccess}
       />
 
+      {/* Google Apps Script(GAS) Webhook Modal */}
+      <GasSettingsModal
+        isOpen={isGasSettingsOpen}
+        onClose={() => setIsGasSettingsOpen(false)}
+      />
+
       {/* Footer */}
       <footer className="bg-[#091124] border-t border-[#1a2b56] py-6 text-xs text-slate-400 mt-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3">
@@ -396,7 +456,9 @@ export default function App() {
             </div>
             <span className="font-extrabold text-white">신안해양과학고등학교</span>
             <span className="hidden sm:inline text-slate-600">|</span>
-            <span className="text-slate-400">2022 개정 체육 2 교육과정 맞춤형 체력관리 시스템</span>
+            <span className="text-slate-300 font-bold">paps&fitt</span>
+            <span className="hidden sm:inline text-slate-600">·</span>
+            <span className="text-slate-400">2022 개정 체육과 맞춤형 체력관리 시스템</span>
           </div>
           <div className="flex items-center gap-3 text-[11px] font-medium">
             <span className="text-slate-400">순발력 · 심폐지구력 · 유연성 · 근력/근지구력 · BMI</span>

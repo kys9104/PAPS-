@@ -159,7 +159,7 @@ export const PasswordChangeModal: React.FC<PasswordChangeModalProps> = ({
                 maxLength={8}
                 value={currentPin}
                 onChange={(e) => setCurrentPin(e.target.value)}
-                placeholder="현재 4자리 PIN 입력"
+                placeholder="현재 PIN 입력 (초기: 0000)"
                 className="w-full bg-[#070e1e] border border-[#1e2f5b] focus:border-[#E8FD3B] rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-slate-500 focus:outline-none transition font-mono"
               />
               <button

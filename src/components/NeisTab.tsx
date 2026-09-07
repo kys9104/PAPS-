@@ -307,7 +307,7 @@ export const NeisTab: React.FC<NeisTabProps> = ({
   // 세특 저장 핸들러 (체육교사 고유 권한)
   const handleSave = async () => {
     if (!isTeacher) {
-      showToast('⚠️ 생활기록부 세특 저장은 체육교사 인증(비밀번호: 4161) 후 가능합니다.');
+      showToast('⚠️ 생활기록부 세특 저장은 체육교사 관리자 인증 후 가능합니다.');
       if (onOpenTeacherLogin) {
         onOpenTeacherLogin();
       }

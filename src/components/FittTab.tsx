@@ -8,13 +8,21 @@ import {
   Flame,
   Activity,
   Calendar,
-  FileCheck
+  FileCheck,
+  Timer,
+  FileSpreadsheet,
+  Plus,
+  Trash2,
+  ArrowRight,
+  Sparkles
 } from 'lucide-react';
-import { StudentProfile, FITTPlan, LessonPlan } from '../types';
+import { StudentProfile, FITTPlan, LessonPlan, MainExerciseSlot } from '../types';
 import {
   saveStudentFittPlan,
   saveStudentLessonPlans,
-  syncToGoogleSheet
+  syncToGoogleSheet,
+  createDefaultMainExercises,
+  exportToGoogleSheetGas
 } from '../services/storageService';
 import { EXERCISE_GUIDES } from '../data/exerciseGuides';
 
@@ -25,6 +33,8 @@ interface FittTabProps {
   onUpdateFittPlan: (plan: FITTPlan) => void;
   onUpdateLessonPlans: (plans: LessonPlan[]) => void;
   onOpenAuth: () => void;
+  onApplyToIntervalTimer?: (lesson: LessonPlan) => void;
+  onOpenGasSettings?: () => void;
 }
 
 export const FittTab: React.FC<FittTabProps> = ({
@@ -33,7 +43,9 @@ export const FittTab: React.FC<FittTabProps> = ({
   lessonPlans,
   onUpdateFittPlan,
   onUpdateLessonPlans,
-  onOpenAuth
+  onOpenAuth,
+  onApplyToIntervalTimer,
+  onOpenGasSettings
 }) => {
   // FITT Form State
   const [frequency, setFrequency] = useState<string>(
@@ -66,8 +78,37 @@ export const FittTab: React.FC<FittTabProps> = ({
     continuity: fittPlan?.principlesChecklist?.continuity ?? true
   });
 
-  // 5 Lessons State
-  const [lessons, setLessons] = useState<LessonPlan[]>(lessonPlans);
+  // 차시별 8개 본운동 슬롯 보장 헬퍼
+  const normalizeLessonPlansWithEight = (plans: LessonPlan[]): LessonPlan[] => {
+    return plans.map((p) => {
+      let slots = p.mainExercises ? [...p.mainExercises] : [];
+      if (slots.length !== 8) {
+        const factorKey = p.targetFactor?.includes('심폐')
+          ? 'cardio'
+          : p.targetFactor?.includes('근력')
+          ? 'strength'
+          : p.targetFactor?.includes('유연')
+          ? 'flexibility'
+          : p.targetFactor?.includes('순발')
+          ? 'agility'
+          : 'total';
+        const defaultEight = createDefaultMainExercises(factorKey as any);
+        slots = defaultEight.map((de, i) => slots[i] || de);
+      }
+      return {
+        ...p,
+        mainExercises: slots,
+        workTimeSeconds: p.workTimeSeconds || 40,
+        restTimeSeconds: p.restTimeSeconds || 20,
+        setsCount: p.setsCount || 3
+      };
+    });
+  };
+
+  // 5 Lessons State (정확히 8개 고정 본운동 슬롯 보장)
+  const [lessons, setLessons] = useState<LessonPlan[]>(() =>
+    normalizeLessonPlansWithEight(lessonPlans)
+  );
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
@@ -86,8 +127,99 @@ export const FittTab: React.FC<FittTabProps> = ({
   }, [fittPlan]);
 
   useEffect(() => {
-    setLessons(lessonPlans);
+    setLessons(normalizeLessonPlansWithEight(lessonPlans));
   }, [lessonPlans]);
+
+  // 본운동 8개 슬롯 개별 수정 핸들러
+  const handleMainExerciseSlotChange = (
+    lessonIdx: number,
+    slotIdx: number,
+    field: keyof MainExerciseSlot,
+    value: string
+  ) => {
+    const updated = [...lessons];
+    const currentSlots = updated[lessonIdx].mainExercises
+      ? [...updated[lessonIdx].mainExercises!]
+      : createDefaultMainExercises('total');
+
+    currentSlots[slotIdx] = {
+      ...currentSlots[slotIdx],
+      [field]: value
+    };
+    updated[lessonIdx] = {
+      ...updated[lessonIdx],
+      mainExercises: currentSlots
+    };
+    setLessons(updated);
+  };
+
+  // 4대 체력 가이드에서 선택 시 해당 슬롯으로 자동 입력
+  const handleSelectGuideForSlot = (
+    lessonIdx: number,
+    slotIdx: number,
+    exerciseId: string
+  ) => {
+    if (!exerciseId) return;
+    const guide = EXERCISE_GUIDES.find((g) => g.id === exerciseId);
+    if (!guide) return;
+
+    const updated = [...lessons];
+    const currentSlots = updated[lessonIdx].mainExercises
+      ? [...updated[lessonIdx].mainExercises!]
+      : createDefaultMainExercises('total');
+
+    currentSlots[slotIdx] = {
+      index: slotIdx + 1,
+      name: guide.name,
+      durationOrReps: guide.recommendedSets || '40초',
+      category: guide.category,
+      targetMuscle: Array.isArray(guide.targetMuscles)
+        ? guide.targetMuscles.join(', ')
+        : guide.targetMuscles
+    };
+
+    updated[lessonIdx] = {
+      ...updated[lessonIdx],
+      mainExercises: currentSlots
+    };
+    setLessons(updated);
+  };
+
+  // [핵심 요구사항] FITT 차시 내용을 인터벌 타이머로 즉시 매핑 및 화면 이동
+  const applyToIntervalTimer = (lesson: LessonPlan) => {
+    const normalized = normalizeLessonPlansWithEight([lesson])[0];
+    if (onApplyToIntervalTimer) {
+      onApplyToIntervalTimer(normalized);
+    }
+  };
+
+  // [핵심 요구사항] 구글 시트(GAS) 수동 내보내기 (Rate Limit 방지용)
+  const handleExportFittToGas = async () => {
+    if (!student) return;
+    setIsSyncing(true);
+    const activeFirstLesson = lessons[0];
+    const payload = {
+      studentId: student.id,
+      studentName: student.name,
+      frequency,
+      intensity,
+      time,
+      type,
+      selfAnalysis,
+      goalStatement,
+      principlesChecklist: principles,
+      mainExercises: activeFirstLesson?.mainExercises || [],
+      mainRoutine: activeFirstLesson?.mainRoutine || ''
+    };
+
+    const result = await exportToGoogleSheetGas('FITT', payload);
+    setIsSyncing(false);
+    setStatusMessage({
+      text: result.message,
+      type: result.success ? 'success' : 'error'
+    });
+    setTimeout(() => setStatusMessage(null), 5000);
+  };
 
   if (!student) {
     return (
@@ -265,6 +397,15 @@ export const FittTab: React.FC<FittTabProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={handleExportFittToGas}
+              disabled={isSyncing}
+              className="px-4 py-2.5 rounded-2xl bg-[#142245] hover:bg-[#1c2e5a] text-slate-200 border border-[#1e2f5b] font-bold text-xs flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
+              title="Google Apps Script를 통해 구글 스프레드시트 [FITT_처방] 탭으로 내보냅니다."
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+              <span>시트로 내보내기</span>
+            </button>
             <button
               onClick={handleSaveFitt}
               disabled={isSyncing}
@@ -569,24 +710,36 @@ export const FittTab: React.FC<FittTabProps> = ({
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => handleToggleLesson(idx)}
-                  className={`px-4 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 transition cursor-pointer ${
-                    lesson.isCompleted
-                      ? 'bg-[#E8FD3B] text-black shadow-[0_0_15px_rgba(232,253,59,0.3)]'
-                      : 'bg-[#142245] text-slate-300 hover:text-white border border-[#1e2f5b]'
-                  }`}
-                >
-                  <CheckCircle2 className={`w-4 h-4 ${lesson.isCompleted ? 'stroke-[3]' : ''}`} />
-                  <span>{lesson.isCompleted ? '실천 완료됨' : '실천 완료 체크'}</span>
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => applyToIntervalTimer(lesson)}
+                    className="px-3.5 py-2 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-400/40 text-xs font-black flex items-center gap-1.5 transition cursor-pointer shadow-sm"
+                    title="이 차시의 8개 본운동 루틴과 설정값을 인터벌 타이머로 즉시 매핑하고 시작 대기합니다."
+                  >
+                    <Timer className="w-4 h-4 text-sky-400" />
+                    <span>인터벌 타이머로 연동</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleToggleLesson(idx)}
+                    className={`px-4 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 transition cursor-pointer ${
+                      lesson.isCompleted
+                        ? 'bg-[#E8FD3B] text-black shadow-[0_0_15px_rgba(232,253,59,0.3)]'
+                        : 'bg-[#142245] text-slate-300 hover:text-white border border-[#1e2f5b]'
+                    }`}
+                  >
+                    <CheckCircle2 className={`w-4 h-4 ${lesson.isCompleted ? 'stroke-[3]' : ''}`} />
+                    <span>{lesson.isCompleted ? '실천 완료됨' : '실천 완료 체크'}</span>
+                  </button>
+                </div>
               </div>
 
-              {/* Workout Structure: Warm-up, Main, Cool-down */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 pt-4">
+              {/* Workout Structure: Warm-up, Main (8 Slots), Cool-down */}
+              <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 pt-4">
                 {/* 1. Warm-up */}
-                <div className="p-4 bg-[#0d172e] rounded-2xl border border-[#1e2f5b] space-y-2 flex flex-col justify-between">
+                <div className="p-4 bg-[#0d172e] rounded-2xl border border-[#1e2f5b] space-y-2 flex flex-col justify-between lg:col-span-1">
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <label className="text-xs font-bold text-[#E8FD3B] flex items-center gap-1.5">
@@ -636,66 +789,132 @@ export const FittTab: React.FC<FittTabProps> = ({
                   </div>
                 </div>
 
-                {/* 2. Main Routine */}
-                <div className="p-4 bg-[#0d172e] rounded-2xl border border-[#1e2f5b] space-y-2 flex flex-col justify-between">
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs font-bold text-sky-400 flex items-center gap-1.5">
-                        <Activity className="w-3.5 h-3.5" />
-                        본운동 루틴 (Main Routine)
+                {/* 2. Main Routine (8개 본운동 슬롯 고정) */}
+                <div className="p-4 bg-[#0d172e] rounded-2xl border border-[#1e2f5b] space-y-3 lg:col-span-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#1e2f5b] pb-2">
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs font-black text-sky-400 flex items-center gap-1.5">
+                        <Activity className="w-4 h-4" />
+                        본운동 (8개 운동 슬롯 고정)
                       </label>
-                      <span className="text-[10px] text-slate-400">약 30~35분</span>
+                      <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                        인터벌 서킷 연동
+                      </span>
                     </div>
 
-                    <textarea
-                      rows={3}
-                      value={lesson.mainRoutine}
-                      onChange={(e) => handleLessonChange(idx, 'mainRoutine', e.target.value)}
-                      placeholder="본운동 루틴을 직접 입력하세요..."
-                      className="w-full bg-[#070e1e] border border-[#1e2f5b] focus:border-sky-400 rounded-xl p-2 text-xs text-white focus:outline-none resize-none leading-relaxed"
-                    />
+                    <div className="flex items-center gap-2 text-[11px] text-slate-300">
+                      <div className="flex items-center gap-1">
+                        <span className="text-slate-400">운동:</span>
+                        <input
+                          type="number"
+                          value={lesson.workTimeSeconds || 40}
+                          onChange={(e) =>
+                            handleLessonChange(idx, 'workTimeSeconds' as any, String(e.target.value))
+                          }
+                          className="w-11 bg-[#070e1e] border border-[#1e2f5b] rounded px-1 text-center text-xs font-bold text-white"
+                        />
+                        <span>초</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className="text-slate-400">휴식:</span>
+                        <input
+                          type="number"
+                          value={lesson.restTimeSeconds || 20}
+                          onChange={(e) =>
+                            handleLessonChange(idx, 'restTimeSeconds' as any, String(e.target.value))
+                          }
+                          className="w-11 bg-[#070e1e] border border-[#1e2f5b] rounded px-1 text-center text-xs font-bold text-white"
+                        />
+                        <span>초</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className="text-slate-400">세트:</span>
+                        <input
+                          type="number"
+                          value={lesson.setsCount || 3}
+                          onChange={(e) =>
+                            handleLessonChange(idx, 'setsCount' as any, String(e.target.value))
+                          }
+                          className="w-9 bg-[#070e1e] border border-[#1e2f5b] rounded px-1 text-center text-xs font-bold text-white"
+                        />
+                      </div>
+                    </div>
                   </div>
 
-                  {/* Dropdown Append Guide */}
-                  <div className="pt-2 border-t border-[#1e2f5b]/80">
-                    <label className="block text-[10px] font-bold text-slate-400 mb-1">
-                      + 4대 체력 가이드에서 추가:
-                    </label>
-                    <select
-                      onChange={(e) => {
-                        handleAppendExercise(idx, 'mainRoutine', e.target.value);
-                        e.target.value = '';
-                      }}
-                      className="w-full bg-[#070e1e] border border-[#1e2f5b] focus:border-sky-400 text-slate-300 text-[11px] rounded-lg px-2 py-1.5 focus:outline-none cursor-pointer"
-                    >
-                      <option value="">운동 가이드 선택 (클릭시 추가)</option>
-                      <optgroup label="심폐지구력 (셔틀런, 인터벌)">
-                        {cardioExercises.map((e) => (
-                          <option key={e.id} value={e.id}>
-                            {e.name}
-                          </option>
-                        ))}
-                      </optgroup>
-                      <optgroup label="근력 및 근지구력 (웨이트, 코어)">
-                        {strengthExercises.map((e) => (
-                          <option key={e.id} value={e.id}>
-                            {e.name}
-                          </option>
-                        ))}
-                      </optgroup>
-                      <optgroup label="순발력 (점프, 파워)">
-                        {powerExercises.map((e) => (
-                          <option key={e.id} value={e.id}>
-                            {e.name}
-                          </option>
-                        ))}
-                      </optgroup>
-                    </select>
+                  {/* 8-Slot Grid (2 Columns x 4 Rows) */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {(lesson.mainExercises || []).map((slot, slotIdx) => (
+                      <div
+                        key={slot.index}
+                        className="p-2.5 bg-[#070e1e] border border-[#1e2f5b] hover:border-sky-500/50 rounded-xl space-y-1.5 transition"
+                      >
+                        <div className="flex items-center justify-between gap-1">
+                          <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                            <span className="w-5 h-5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-400/40 text-[10px] font-black flex items-center justify-center shrink-0">
+                              {slot.index}
+                            </span>
+                            <input
+                              type="text"
+                              value={slot.name}
+                              onChange={(e) =>
+                                handleMainExerciseSlotChange(idx, slotIdx, 'name', e.target.value)
+                              }
+                              placeholder={`운동 ${slot.index}`}
+                              className="bg-transparent font-bold text-xs text-white focus:outline-none border-b border-dashed border-transparent hover:border-sky-400 focus:border-sky-400 py-0.5 w-full min-w-0"
+                            />
+                          </div>
+                          <input
+                            type="text"
+                            value={slot.durationOrReps}
+                            onChange={(e) =>
+                              handleMainExerciseSlotChange(idx, slotIdx, 'durationOrReps', e.target.value)
+                            }
+                            placeholder="40초"
+                            className="bg-[#0d172e] border border-[#1e2f5b] rounded px-1.5 py-0.5 text-[10px] font-bold text-slate-300 w-16 text-right focus:outline-none shrink-0"
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-between gap-1 pt-1 border-t border-[#1e2f5b]/60">
+                          <span className="text-[10px] text-slate-500 truncate max-w-[100px]">
+                            {slot.category || '체력 맞춤'}
+                          </span>
+                          <select
+                            onChange={(e) => {
+                              handleSelectGuideForSlot(idx, slotIdx, e.target.value);
+                              e.target.value = '';
+                            }}
+                            className="bg-[#0d172e] border border-[#1e2f5b] text-[10px] text-slate-300 rounded px-1 py-0.5 focus:outline-none cursor-pointer max-w-[130px]"
+                          >
+                            <option value="">가이드 선택</option>
+                            <optgroup label="심폐지구력">
+                              {cardioExercises.map((e) => (
+                                <option key={e.id} value={e.id}>{e.name}</option>
+                              ))}
+                            </optgroup>
+                            <optgroup label="근력/근지구력">
+                              {strengthExercises.map((e) => (
+                                <option key={e.id} value={e.id}>{e.name}</option>
+                              ))}
+                            </optgroup>
+                            <optgroup label="순발력">
+                              {powerExercises.map((e) => (
+                                <option key={e.id} value={e.id}>{e.name}</option>
+                              ))}
+                            </optgroup>
+                            <optgroup label="유연성">
+                              {flexibilityExercises.map((e) => (
+                                <option key={e.id} value={e.id}>{e.name}</option>
+                              ))}
+                            </optgroup>
+                          </select>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
 
                 {/* 3. Cool-down */}
-                <div className="p-4 bg-[#0d172e] rounded-2xl border border-[#1e2f5b] space-y-2 flex flex-col justify-between">
+                <div className="p-4 bg-[#0d172e] rounded-2xl border border-[#1e2f5b] space-y-2 flex flex-col justify-between lg:col-span-1">
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <label className="text-xs font-bold text-teal-400 flex items-center gap-1.5">

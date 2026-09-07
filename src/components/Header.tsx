@@ -78,7 +78,7 @@ export const Header: React.FC<HeaderProps> = ({
               </span>
             </div>
             <h1 className="text-base sm:text-lg font-black tracking-tight text-white mt-0.5 flex items-center gap-1.5">
-              <span>체력관리 시스템</span>
+              <span>paps&fitt</span>
               <span className="w-1.5 h-1.5 rounded-full bg-[#E8FD3B] animate-pulse"></span>
             </h1>
             <p className="text-[10px] text-slate-400 uppercase tracking-widest font-mono">
@@ -144,7 +144,7 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               onClick={onOpenTeacherLogin}
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-slate-300 bg-[#0d172e] hover:bg-[#142245] hover:text-[#E8FD3B] border border-[#1e2f5b] transition shadow-xs cursor-pointer"
-              title="신안해양과학고 체육교사 관리자 인증 (비밀번호: 4161)"
+              title="신안해양과학고 체육교사 관리자 인증"
             >
               <Lock className="w-3.5 h-3.5 text-[#E8FD3B]" />
               <span>체육교사 로그인</span>

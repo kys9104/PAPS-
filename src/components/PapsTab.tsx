@@ -8,7 +8,10 @@ import {
   CheckCircle2,
   Clock,
   Trash2,
-  AlertTriangle
+  AlertTriangle,
+  FileSpreadsheet,
+  Lock,
+  ShieldCheck
 } from 'lucide-react';
 import {
   StudentProfile,
@@ -27,7 +30,11 @@ import {
   getGradeColor,
   generateNEISRecommendation
 } from '../data/papsStandards';
-import { savePapsRecord, syncToGoogleSheet } from '../services/storageService';
+import {
+  savePapsRecord,
+  syncToGoogleSheet,
+  exportToGoogleSheetGas
+} from '../services/storageService';
 
 interface PapsTabProps {
   student: StudentProfile | null;
@@ -165,6 +172,32 @@ export const PapsTab: React.FC<PapsTabProps> = ({
     setTimeout(() => setSaveSuccessMsg(null), 4000);
   };
 
+  // Google Apps Script(GAS) 웹앱 수동 내보내기
+  const handleExportPapsToGas = async () => {
+    if (!student) {
+      alert('학생 인증 정보가 없습니다.');
+      return;
+    }
+    setIsSaving(true);
+    const payload = {
+      studentId: student.id,
+      studentName: student.name,
+      gender,
+      overallGrade: evaluations.overallGrade,
+      totalScore: evaluations.totalScore,
+      cardio: evaluations.cardio,
+      flexibility: evaluations.flexibility,
+      strength: evaluations.strength,
+      agility: evaluations.agility,
+      bodyComp: evaluations.bodyComp
+    };
+
+    const res = await exportToGoogleSheetGas('PAPS', payload);
+    setIsSaving(false);
+    setSaveSuccessMsg(res.message);
+    setTimeout(() => setSaveSuccessMsg(null), 5000);
+  };
+
   const overallColors = getGradeColor(evaluations.overallGrade);
 
   return (
@@ -188,7 +221,17 @@ export const PapsTab: React.FC<PapsTabProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            type="button"
+            onClick={handleExportPapsToGas}
+            disabled={isSaving}
+            className="px-4 py-2.5 rounded-2xl bg-[#142245] hover:bg-[#1c2e5a] text-slate-200 text-xs font-bold border border-[#1e2f5b] flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
+            title="Google Apps Script를 통해 구글 시트 [PAPS_결과] 탭으로 내보냅니다."
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+            <span>시트로 내보내기</span>
+          </button>
           <button
             onClick={() => {
               setCardioVal(60);
@@ -198,7 +241,7 @@ export const PapsTab: React.FC<PapsTabProps> = ({
               setHeightCm(172);
               setWeightKg(62);
             }}
-            className="px-4 py-2.5 rounded-2xl bg-[#142245] hover:bg-[#1a2b56] text-slate-300 text-xs font-bold border border-[#1e2f5b] flex items-center gap-1.5 transition cursor-pointer"
+            className="px-4 py-2.5 rounded-2xl bg-[#070e1e] hover:bg-[#142245] text-slate-300 text-xs font-bold border border-[#1e2f5b] flex items-center gap-1.5 transition cursor-pointer"
           >
             <RotateCcw className="w-4 h-4" />
             기본값 초기화
@@ -460,53 +503,79 @@ export const PapsTab: React.FC<PapsTabProps> = ({
           </div>
         </div>
 
-        {/* Factor 5: Body Composition (BMI) */}
-        <div className="p-5 rounded-3xl bg-[#0d172e] border border-[#1e2f5b] shadow-xl space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-purple-400" />
-              <h3 className="text-sm font-bold text-white">5. 신체조성 (체지방/BMI)</h3>
-            </div>
-            <span className={`text-xs px-2.5 py-0.5 rounded-full font-bold ${getGradeColor(evaluations.bodyComp.grade).badge}`}>
-              {evaluations.bodyComp.grade}등급 ({evaluations.bodyComp.score}점)
-            </span>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="block text-[11px] text-slate-400 font-bold mb-1">키 (cm)</label>
-              <input
-                type="number"
-                step="0.1"
-                value={heightCm}
-                onChange={(e) => setHeightCm(Number(e.target.value))}
-                className="w-full bg-[#070e1e] border border-[#1e2f5b] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-400 font-mono font-bold"
-              />
-            </div>
-            <div>
-              <label className="block text-[11px] text-slate-400 font-bold mb-1">몸무게 (kg)</label>
-              <input
-                type="number"
-                step="0.1"
-                value={weightKg}
-                onChange={(e) => setWeightKg(Number(e.target.value))}
-                className="w-full bg-[#070e1e] border border-[#1e2f5b] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-400 font-mono font-bold"
-              />
-            </div>
-          </div>
-
-          <div className="p-3 bg-[#070e1e] rounded-2xl border border-[#1e2f5b] flex items-center justify-between">
-            <div>
-              <span className="text-[11px] text-slate-400 font-bold block">계산된 BMI 지수</span>
-              <span className="text-lg font-black text-purple-300 font-mono">
-                {evaluations.bodyComp.bmi} kg/㎡
+        {/* Factor 5: Body Composition (BMI) - 체육교사에게만 노출/수정 가능, 학생에게는 비노출 보호 */}
+        {isTeacher ? (
+          <div className="p-5 rounded-3xl bg-[#0d172e] border border-purple-500/40 shadow-xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-purple-400" />
+                <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+                  <span>5. 신체조성 (체지방/BMI)</span>
+                  <span className="text-[10px] text-purple-300 bg-purple-950/80 px-2 py-0.5 rounded-full border border-purple-700/60 font-medium flex items-center gap-1">
+                    <ShieldCheck className="w-3 h-3 text-purple-400" />
+                    체육교사 권한
+                  </span>
+                </h3>
+              </div>
+              <span className={`text-xs px-2.5 py-0.5 rounded-full font-bold ${getGradeColor(evaluations.bodyComp.grade).badge}`}>
+                {evaluations.bodyComp.grade}등급 ({evaluations.bodyComp.score}점)
               </span>
             </div>
-            <span className="text-xs font-bold text-purple-200 bg-[#142245] px-2.5 py-1 rounded-full border border-purple-500/30">
-              {evaluations.bodyComp.status}
-            </span>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-[11px] text-slate-400 font-bold mb-1">키 (cm)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={heightCm}
+                  onChange={(e) => setHeightCm(Number(e.target.value))}
+                  className="w-full bg-[#070e1e] border border-[#1e2f5b] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-400 font-mono font-bold"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] text-slate-400 font-bold mb-1">몸무게 (kg)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={weightKg}
+                  onChange={(e) => setWeightKg(Number(e.target.value))}
+                  className="w-full bg-[#070e1e] border border-[#1e2f5b] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-400 font-mono font-bold"
+                />
+              </div>
+            </div>
+
+            <div className="p-3 bg-[#070e1e] rounded-2xl border border-[#1e2f5b] flex items-center justify-between">
+              <div>
+                <span className="text-[11px] text-slate-400 font-bold block">계산된 BMI 지수</span>
+                <span className="text-lg font-black text-purple-300 font-mono">
+                  {evaluations.bodyComp.bmi} kg/㎡
+                </span>
+              </div>
+              <span className="text-xs font-bold text-purple-200 bg-[#142245] px-2.5 py-1 rounded-full border border-purple-500/30">
+                {evaluations.bodyComp.status}
+              </span>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="p-5 rounded-3xl bg-[#0a1224] border border-[#1a294d] shadow-xl flex flex-col justify-between space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Lock className="w-4 h-4 text-purple-400" />
+                <h3 className="text-sm font-bold text-slate-300">5. 신체조성 (체격/비만도)</h3>
+              </div>
+              <span className="text-[10px] text-purple-300 bg-purple-950/70 border border-purple-800 px-2 py-0.5 rounded-full font-bold">
+                교사 전용 보호 항목
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              학생 개인정보 및 체격 프라이버시 보호 규정에 따라 신체조성(키, 몸무게, 비만도 지수)은 체육교사만 열람 및 입력할 수 있습니다.
+            </p>
+            <div className="pt-2 text-[11px] text-slate-500 border-t border-[#1e2f5b]/50">
+              * 1~4번 체력 요인(심폐지구력, 유연성, 근력, 순발력)은 정상 반영됩니다.
+            </div>
+          </div>
+        )}
 
         {/* Goal Setting & Target Comparison Helper */}
         <div className="p-5 rounded-3xl bg-[#0d172e] border border-[#1e2f5b] shadow-xl flex flex-col justify-between space-y-3">

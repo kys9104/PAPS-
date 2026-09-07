@@ -3,6 +3,7 @@ import {
   PAPSRecord,
   FITTPlan,
   LessonPlan,
+  MainExerciseSlot,
   WorkoutLog,
   TeacherSettings
 } from '../types';
@@ -48,14 +49,75 @@ export function verifyTeacherPassword(password: string): boolean {
   return password.trim() === OFFICIAL_TEACHER_PASSWORD;
 }
 
-// 기본 5차시 기본 템플릿
+// 8개 본운동 기본 생성 헬퍼
+export function createDefaultMainExercises(presetType: 'cardio' | 'strength' | 'flexibility' | 'agility' | 'total'): MainExerciseSlot[] {
+  const templates: Record<string, MainExerciseSlot[]> = {
+    cardio: [
+      { index: 1, name: '20m 셔틀런 인터벌', durationOrReps: '40초', category: '심폐지구력', targetMuscle: '전신 심폐' },
+      { index: 2, name: '점핑 잭 (팔벌려뛰기)', durationOrReps: '40초', category: '심폐지구력', targetMuscle: '전신 유산소' },
+      { index: 3, name: '하이니 런 (무릎 당겨뛰기)', durationOrReps: '40초', category: '심폐지구력', targetMuscle: '장요근 및 코어' },
+      { index: 4, name: '마운틴 클라이머', durationOrReps: '40초', category: '심폐지구력', targetMuscle: '복직근 및 어깨' },
+      { index: 5, name: '스케이터 점프', durationOrReps: '40초', category: '심폐지구력', targetMuscle: '둔근 및 심폐' },
+      { index: 6, name: '버피 테스트', durationOrReps: '40초', category: '순발력', targetMuscle: '전신 복합' },
+      { index: 7, name: '섀도우 복싱 펀치 러닝', durationOrReps: '40초', category: '심폐지구력', targetMuscle: '상체 및 심폐' },
+      { index: 8, name: '플랭크 잭', durationOrReps: '40초', category: '근력 및 근지구력', targetMuscle: '코어 및 둔근' }
+    ],
+    strength: [
+      { index: 1, name: '맨몸 풀 스쿼트', durationOrReps: '40초', category: '근력 및 근지구력', targetMuscle: '대퇴사두근 및 둔근' },
+      { index: 2, name: '정석 푸시업 (무릎/정석)', durationOrReps: '40초', category: '근력 및 근지구력', targetMuscle: '대흉근 및 삼두근' },
+      { index: 3, name: '워킹/백 런지', durationOrReps: '40초', category: '근력 및 근지구력', targetMuscle: '하체 둔근' },
+      { index: 4, name: '엘보우 플랭크 홀드', durationOrReps: '40초', category: '근력 및 근지구력', targetMuscle: '코어 복직근' },
+      { index: 5, name: '체어 딥스 (상완삼두)', durationOrReps: '40초', category: '근력 및 근지구력', targetMuscle: '삼두박근' },
+      { index: 6, name: '글루트 브릿지 (둔근)', durationOrReps: '40초', category: '근력 및 근지구력', targetMuscle: '대둔근 및 햄스트링' },
+      { index: 7, name: '사이드 플랭크 (좌/우)', durationOrReps: '40초', category: '근력 및 근지구력', targetMuscle: '복사근' },
+      { index: 8, name: '슈퍼맨 백 익스텐션', durationOrReps: '40초', category: '근력 및 근지구력', targetMuscle: '척추기립근' }
+    ],
+    flexibility: [
+      { index: 1, name: '앉아윗몸앞으로굽히기 홀드', durationOrReps: '40초', category: '유연성', targetMuscle: '햄스트링 및 요추' },
+      { index: 2, name: '월 숄더 모빌리티 스트레칭', durationOrReps: '40초', category: '유연성', targetMuscle: '어깨 및 흉추' },
+      { index: 3, name: '나비 자세 (골반 내전근)', durationOrReps: '40초', category: '유연성', targetMuscle: '골반 및 고관절' },
+      { index: 4, name: '다운독 및 카프 스트레칭', durationOrReps: '40초', category: '유연성', targetMuscle: '후면 사슬' },
+      { index: 5, name: '이상근 4자 다리 스트레칭', durationOrReps: '40초', category: '유연성', targetMuscle: '둔근 및 이상근' },
+      { index: 6, name: '코브라 자세 (복부 신전)', durationOrReps: '40초', category: '유연성', targetMuscle: '복직근 및 가슴' },
+      { index: 7, name: '사이드 라잉 흉추 회전', durationOrReps: '40초', category: '유연성', targetMuscle: '흉추 회전근' },
+      { index: 8, name: '차일드 포즈 전신 이완', durationOrReps: '40초', category: '유연성', targetMuscle: '광배근 및 척추' }
+    ],
+    agility: [
+      { index: 1, name: '제자리 멀리뛰기 착지 드릴', durationOrReps: '40초', category: '순발력', targetMuscle: '하체 탄성' },
+      { index: 2, name: '점프 스쿼트', durationOrReps: '40초', category: '순발력', targetMuscle: '대퇴부 및 순발력' },
+      { index: 3, name: '래피드 피트 (잔발 스텝)', durationOrReps: '40초', category: '순발력', targetMuscle: '종아리 및 민첩성' },
+      { index: 4, name: '버피 점프 턱', durationOrReps: '40초', category: '순발력', targetMuscle: '전신 순발력' },
+      { index: 5, name: '사이드 스텝 셔틀 탭', durationOrReps: '40초', category: '순발력', targetMuscle: '측면 민첩성' },
+      { index: 6, name: '플라이오메트릭 런지 점프', durationOrReps: '40초', category: '순발력', targetMuscle: '하체 파워' },
+      { index: 7, name: '박스 점프 / 스텝 업', durationOrReps: '40초', category: '순발력', targetMuscle: '대퇴사두근' },
+      { index: 8, name: '인터벌 섀도우 대시', durationOrReps: '40초', category: '순발력', targetMuscle: '전신 가속력' }
+    ],
+    total: [
+      { index: 1, name: '맨몸 스쿼트', durationOrReps: '40초', category: '근력 및 근지구력', targetMuscle: '대퇴사두근' },
+      { index: 2, name: '푸시업', durationOrReps: '40초', category: '근력 및 근지구력', targetMuscle: '대흉근' },
+      { index: 3, name: '점핑 잭', durationOrReps: '40초', category: '심폐지구력', targetMuscle: '전신 유산소' },
+      { index: 4, name: '런지 교차', durationOrReps: '40초', category: '근력 및 근지구력', targetMuscle: '둔근' },
+      { index: 5, name: '마운틴 클라이머', durationOrReps: '40초', category: '심폐지구력', targetMuscle: '코어' },
+      { index: 6, name: '엘보우 플랭크', durationOrReps: '40초', category: '근력 및 근지구력', targetMuscle: '복직근' },
+      { index: 7, name: '버피 테스트', durationOrReps: '40초', category: '순발력', targetMuscle: '전신 복합' },
+      { index: 8, name: '하이 니 (제자리 달리기)', durationOrReps: '40초', category: '심폐지구력', targetMuscle: '심폐지구력' }
+    ]
+  };
+  return templates[presetType] || templates.total;
+}
+
+// 기본 5차시 기본 템플릿 (본운동 정확히 8개 고정 슬롯 포함)
 export const DEFAULT_LESSON_PLANS: LessonPlan[] = [
   {
     lessonWeek: 1,
     title: '1차시: 기초 체력 진단 및 심폐지구력 기초 루틴',
     targetFactor: '심폐지구력',
     warmUp: '동적 관절 가동 스트레칭 5분 + 팔벌려뛰기 50회',
-    mainRoutine: '20m 셔틀런 인터벌(2분 달리기 + 1분 휴식) 4세트 + 버트 킥 유산소 러닝 3분',
+    mainRoutine: '20m 셔틀런 및 8대 유산소 인터벌 순환 트레이닝',
+    mainExercises: createDefaultMainExercises('cardio'),
+    workTimeSeconds: 40,
+    restTimeSeconds: 20,
+    setsCount: 3,
     coolDown: '루프밴드 하체 이완 및 햄스트링 정적 스트레칭 5분',
     reflection: '',
     isCompleted: false
@@ -65,7 +127,11 @@ export const DEFAULT_LESSON_PLANS: LessonPlan[] = [
     title: '2차시: 코어 및 상·하체 근력/근지구력 강화 실습',
     targetFactor: '근력/근지구력',
     warmUp: '루프밴드 힙 활성화 + 가벼운 버피 10회',
-    mainRoutine: '정석 스쿼트 20회 3세트 + 정석/무릎 푸시업 15회 3세트 + 플랭크 50초 3세트',
+    mainRoutine: '8대 저항성 맨몸 근력 인터벌 루틴 (40초 운동 / 20초 휴식)',
+    mainExercises: createDefaultMainExercises('strength'),
+    workTimeSeconds: 40,
+    restTimeSeconds: 20,
+    setsCount: 3,
     coolDown: '코브라 자세 척추 신전 및 이상근 스트레칭',
     reflection: '',
     isCompleted: false
@@ -75,7 +141,11 @@ export const DEFAULT_LESSON_PLANS: LessonPlan[] = [
     title: '3차시: 관절 가동성 증진 및 유연성 특화 루틴',
     targetFactor: '유연성',
     warmUp: '가벼운 조깅 3분 + 루프밴드 숄더 및 흉추 모빌리티',
-    mainRoutine: '앉아윗몸앞으로굽히기 집중 스트레칭 30초 4세트 + 나비 자세 + 배틀로프 웨이브 3세트',
+    mainRoutine: '앉아윗몸앞으로굽히기 및 8단계 정적 가동성 스트레칭',
+    mainExercises: createDefaultMainExercises('flexibility'),
+    workTimeSeconds: 40,
+    restTimeSeconds: 20,
+    setsCount: 2,
     coolDown: '누워서 전신 이완 호흡법 5분',
     reflection: '',
     isCompleted: false
@@ -85,7 +155,11 @@ export const DEFAULT_LESSON_PLANS: LessonPlan[] = [
     title: '4차시: 순발력 및 순간 가속 파워 집중 훈련',
     targetFactor: '순발력',
     warmUp: '발목 탄성 바운스 + 파워 하이니 런 20초 2세트',
-    mainRoutine: '박스/스쿼트 점프 8회 4세트 + 10m 가속 스프린트 5회 + 터크 점프 8회 3세트',
+    mainRoutine: '8대 플라이오메트릭 순발력 점프 & 대시 서킷 트레이닝',
+    mainExercises: createDefaultMainExercises('agility'),
+    workTimeSeconds: 35,
+    restTimeSeconds: 25,
+    setsCount: 3,
     coolDown: '종아리 및 대퇴사두근 폼롤러/정적 스트레칭',
     reflection: '',
     isCompleted: false
@@ -95,7 +169,11 @@ export const DEFAULT_LESSON_PLANS: LessonPlan[] = [
     title: '5차시: PAPS 재측정 대비 전신 서킷 트레이닝 및 종합 평가',
     targetFactor: '종합체력',
     warmUp: '전신 다이내믹 워밍업 7분',
-    mainRoutine: '타바타 서킷 4라운드: (스쿼트 점프 -> 푸시업 -> 마운틴 클라이머 -> 윗몸말아올리기 각 30초)',
+    mainRoutine: '전신 8대 복합 인터벌 서킷 (타바타 8개 스테이션 순환)',
+    mainExercises: createDefaultMainExercises('total'),
+    workTimeSeconds: 40,
+    restTimeSeconds: 20,
+    setsCount: 3,
     coolDown: '전신 쿨다운 스트레칭 및 FITT 처방 목표 달성도 자기 평가',
     reflection: '',
     isCompleted: false
@@ -143,12 +221,14 @@ export function getAllStudents(): StudentProfile[] {
     const merged = officialList.map((official) => {
       const existing = existingMap.get(official.id);
       if (existing) {
-        // 기존 학생 정보가 있으면 PIN 및 마지막 로그인 시간 보존, 공식 이름 및 성별 갱신
+        // 기존 학생 정보가 있으면 PIN 및 마지막 로그인 시간 보존 (초기 1234이거나 없는 경우 0000으로 자동 마이그레이션)
+        const effectivePin = (!existing.pin || existing.pin === '1234') ? '0000' : existing.pin;
+        if (effectivePin !== existing.pin) needsUpdate = true;
         return {
           ...official,
           name: official.name,
           gender: existing.gender || official.gender,
-          pin: existing.pin || official.pin,
+          pin: effectivePin,
           joinedAt: existing.joinedAt || official.joinedAt,
           lastLoginAt: existing.lastLoginAt
         };
@@ -195,10 +275,15 @@ export async function loginOrRegisterStudent(
   }
 
   if (existing) {
+    // 기존 PIN이 '1234'이거나 미설정된 상태에서 0000을 입력한 경우 마이그레이션 허용
+    if ((!existing.pin || existing.pin === '1234') && pin === '0000') {
+      existing.pin = '0000';
+    }
+
     if (existing.pin !== pin) {
       return {
         success: false,
-        message: 'PIN 번호가 일치하지 않습니다. 올바른 4자리 PIN을 입력해주세요.'
+        message: '보안 PIN 번호가 일치하지 않습니다. 올바른 4자리 PIN(기본 초기 PIN: 0000)을 입력해주세요.'
       };
     }
     // PIN 일치 -> 로그인 성공
@@ -671,6 +756,56 @@ export async function syncToGoogleSheet(payload: {
     return {
       success: false,
       message: `구글 시트 전송 중 오류가 발생했습니다: ${err instanceof Error ? err.message : String(err)}`
+    };
+  }
+}
+
+/**
+ * Google Apps Script(GAS) 웹앱 전용 수동 내보내기 함수
+ * - 무분별한 요청/할당량 초과를 방지하기 위해 사용자가 '시트로 내보내기'를 클릭했을 때만 호출
+ * - type: 'PAPS' | 'FITT' 구조의 분기형 페이로드 전송
+ */
+export async function exportToGoogleSheetGas(
+  type: 'PAPS' | 'FITT',
+  payload: Record<string, any>
+): Promise<{ success: boolean; message: string }> {
+  const settings = getTeacherSettings();
+  const webhookUrl = settings.googleSheetWebhookUrl?.trim();
+
+  if (!webhookUrl) {
+    return {
+      success: false,
+      message: '구글 시트(GAS) Webhook URL이 설정되지 않았습니다. [구글 시트 연동 설정]에서 URL을 먼저 등록해주세요.'
+    };
+  }
+
+  try {
+    const postBody = {
+      type, // 'PAPS' 또는 'FITT'
+      timestamp: new Date().toISOString(),
+      payload
+    };
+
+    // Google Apps Script는 리디렉션 및 CORS 제한으로 인해 'no-cors' 전송을 수행합니다.
+    await fetch(webhookUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8'
+      },
+      body: JSON.stringify(postBody),
+      mode: 'no-cors'
+    });
+
+    const targetSheet = type === 'PAPS' ? '[PAPS_결과]' : '[FITT_처방]';
+    return {
+      success: true,
+      message: `구글 스프레드시트 ${targetSheet} 탭으로 데이터가 성공적으로 내보내졌습니다!`
+    };
+  } catch (err) {
+    console.error('GAS export failed:', err);
+    return {
+      success: false,
+      message: `구글 시트 내보내기 실패: ${err instanceof Error ? err.message : String(err)}`
     };
   }
 }

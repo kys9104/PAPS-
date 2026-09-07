@@ -173,7 +173,7 @@ export const TeacherSyncModal: React.FC<TeacherSyncModalProps> = ({
       studentNum: 1,
       name: '곽승준',
       gender: '남',
-      pin: '1234',
+      pin: '0000',
       joinedAt: new Date().toISOString()
     };
 
@@ -454,7 +454,7 @@ export const TeacherSyncModal: React.FC<TeacherSyncModalProps> = ({
                         {/* Current Badge or PIN */}
                         <div className="text-right">
                           <span className="text-[10px] font-mono text-slate-400 block">
-                            PIN: {s.pin || '1234'}
+                            PIN: {s.pin || '0000'}
                           </span>
                         </div>
                       </div>

@@ -329,7 +329,7 @@ export const AllStudentsTab: React.FC<AllStudentsTabProps> = ({
                   className="w-full px-3 py-1.5 rounded-xl bg-[#142245] hover:bg-[#1d3164] text-amber-300 border border-amber-500/30 text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer"
                 >
                   <Lock className="w-3.5 h-3.5 text-amber-400" />
-                  <span>체육교사 인증(비번: 4161)</span>
+                  <span>체육교사 관리자 인증</span>
                 </button>
               ) : (
                 <button

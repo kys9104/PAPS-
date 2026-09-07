@@ -68,12 +68,30 @@ export interface FITTPlan {
   };
 }
 
+export interface MainExerciseSlot {
+  index: number; // 1 ~ 8
+  name: string;
+  durationOrReps: string; // 예: "40초" 또는 "15회"
+  category: string; // 예: "근력 및 근지구력", "심폐지구력" 등
+  targetMuscle?: string;
+}
+
+export interface StudentProgressStatus {
+  customPlanCreated: boolean; // 1) 맞춤형 설계서 작성 여부
+  selfCheckCompleted: boolean; // 2) 자가 점검 체크리스트 완료 여부
+  lesson5Created: boolean; // 3) 5차시 계획 작성 여부
+}
+
 export interface LessonPlan {
   lessonWeek: number; // 1 ~ 5차시
   title: string;
   targetFactor: string;
   warmUp: string;
   mainRoutine: string;
+  mainExercises?: MainExerciseSlot[]; // 본운동 8개 고정 슬롯
+  workTimeSeconds?: number; // 인터벌 운동 시간(초)
+  restTimeSeconds?: number; // 인터벌 휴식 시간(초)
+  setsCount?: number; // 세트 수
   coolDown: string;
   reflection: string;
   isCompleted: boolean;

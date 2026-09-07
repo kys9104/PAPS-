@@ -34,6 +34,7 @@ import {
 interface TimerTabProps {
   student: StudentProfile | null;
   lessonPlans?: LessonPlan[];
+  appliedLessonPlan?: LessonPlan | null;
   initialExerciseName?: string;
   initialCategory?: string;
   onWorkoutLogged: (log: WorkoutLog) => void;
@@ -48,6 +49,7 @@ type TimerMode = 'interval' | 'stopwatch';
 export const TimerTab: React.FC<TimerTabProps> = ({
   student,
   lessonPlans = [],
+  appliedLessonPlan,
   initialExerciseName = '20m 셔틀런 인터벌 트레이닝',
   initialCategory = '심폐지구력',
   onWorkoutLogged,
@@ -59,9 +61,9 @@ export const TimerTab: React.FC<TimerTabProps> = ({
 
   // Interval Settings
   const [prepTime, setPrepTime] = useState<number>(5); // 5s
-  const [workTime, setWorkTime] = useState<number>(30); // 30s
-  const [restTime, setRestTime] = useState<number>(15); // 15s
-  const [totalSets, setTotalSets] = useState<number>(5); // 5 sets
+  const [workTime, setWorkTime] = useState<number>(40); // 40s
+  const [restTime, setRestTime] = useState<number>(20); // 20s
+  const [totalSets, setTotalSets] = useState<number>(8); // 8 exercises
   const [targetReps, setTargetReps] = useState<number>(15); // Target reps per set
   const [reps, setReps] = useState<number>(0); // Current accumulated repetitions
 
@@ -80,13 +82,33 @@ export const TimerTab: React.FC<TimerTabProps> = ({
   const [exerciseName, setExerciseName] = useState<string>(initialExerciseName);
   const [category, setCategory] = useState<string>(initialCategory);
   const [rpe, setRpe] = useState<number>(7);
-  const [memo, setMemo] = useState<string>('끝까지 집중하여 완주함');
+  const [memo, setMemo] = useState<string>('8개 본운동 인터벌 서킷 완주');
   const [showLogModal, setShowLogModal] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [presetTab, setPresetTab] = useState<'lessons' | 'standards'>('lessons');
 
   const timerRef = useRef<number | null>(null);
   const stopwatchRef = useRef<number | null>(null);
+
+  // FITT 탭에서 인터벌 연동 요청 시 자동 세팅
+  useEffect(() => {
+    if (appliedLessonPlan) {
+      setIsRunning(false);
+      setCurrentPhase('idle');
+      const wTime = appliedLessonPlan.workTimeSeconds || 40;
+      const rTime = appliedLessonPlan.restTimeSeconds || 20;
+      const sets = appliedLessonPlan.mainExercises?.length || appliedLessonPlan.setsCount || 8;
+
+      setWorkTime(wTime);
+      setRestTime(rTime);
+      setTotalSets(sets);
+      setTimeLeft(5);
+      setCurrentSet(1);
+      setExerciseName(appliedLessonPlan.title);
+      setCategory(appliedLessonPlan.targetFactor || '맞춤형 체력');
+      setMemo(`${appliedLessonPlan.title} 8개 본운동 인터벌 순환 완주`);
+    }
+  }, [appliedLessonPlan]);
 
   // Rep Counter Handlers
   const handleAddReps = (delta: number) => {

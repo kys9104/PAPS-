@@ -1,35 +1,58 @@
 import { FactorResult, PAPSRecord } from '../types';
 
 export interface StandardThreshold {
-  grade1: number; // 1등급 기준
-  grade2: number;
-  grade3: number;
-  grade4: number;
-  isLowerBetter?: boolean; // 달리기는 낮을수록 우수
+  grade1: number; // 1등급 기준치
+  grade2: number; // 2등급 기준치
+  grade3: number; // 3등급 기준치
+  grade4: number; // 4등급 기준치
+  isLowerBetter?: boolean; // 기록이 낮을수록 우수 (예: 달리기 초 단위)
 }
 
-export const PAPS_STANDARDS = {
+/**
+ * [교육부 학생건강체력평가(PAPS) 고등학교 1학년(만 16세) 공식 등급 기준표]
+ * - 2022 개정 체육과 교육과정 및 학생 건강체력평가 기준 적용
+ */
+export const HIGH_SCHOOL_GRADE1_PAPS_STANDARDS = {
   남: {
-    왕복오래달리기: { grade1: 77, grade2: 62, grade3: 47, grade4: 31, isLowerBetter: false },
-    오래달리기걷기: { grade1: 390, grade2: 440, grade3: 510, grade4: 600, isLowerBetter: true }, // 초 단위
-    앉아윗몸앞으로굽히기: { grade1: 19.0, grade2: 13.0, grade3: 6.0, grade4: -1.0, isLowerBetter: false },
-    악력: { grade1: 48.0, grade2: 42.0, grade3: 36.0, grade4: 30.0, isLowerBetter: false },
-    팔굽혀펴기: { grade1: 45, grade2: 35, grade3: 24, grade4: 14, isLowerBetter: false },
-    윗몸말아올리기: { grade1: 70, grade2: 55, grade3: 40, grade4: 25, isLowerBetter: false },
-    '50m달리기': { grade1: 7.2, grade2: 7.7, grade3: 8.3, grade4: 9.1, isLowerBetter: true },
-    제자리멀리뛰기: { grade1: 240, grade2: 225, grade3: 208, grade4: 188, isLowerBetter: false }
+    // 1. 심폐지구력
+    왕복오래달리기: { grade1: 77, grade2: 62, grade3: 47, grade4: 31, isLowerBetter: false }, // 횟수
+    오래달리기걷기: { grade1: 390, grade2: 440, grade3: 510, grade4: 600, isLowerBetter: true }, // 초 (6분30초)
+    스텝검사: { grade1: 65, grade2: 55, grade3: 45, grade4: 35, isLowerBetter: false }, // PEI 지수
+
+    // 2. 유연성
+    앉아윗몸앞으로굽히기: { grade1: 19.0, grade2: 13.0, grade3: 6.0, grade4: -1.0, isLowerBetter: false }, // cm
+
+    // 3. 근력 및 근지구력
+    악력: { grade1: 48.0, grade2: 42.0, grade3: 36.0, grade4: 30.0, isLowerBetter: false }, // kg
+    팔굽혀펴기: { grade1: 45, grade2: 35, grade3: 24, grade4: 14, isLowerBetter: false }, // 회
+    윗몸말아올리기: { grade1: 70, grade2: 55, grade3: 40, grade4: 25, isLowerBetter: false }, // 회
+
+    // 4. 순발력
+    '50m달리기': { grade1: 7.2, grade2: 7.7, grade3: 8.3, grade4: 9.1, isLowerBetter: true }, // 초
+    제자리멀리뛰기: { grade1: 240, grade2: 225, grade3: 208, grade4: 188, isLowerBetter: false } // cm
   },
   여: {
-    왕복오래달리기: { grade1: 48, grade2: 38, grade3: 28, grade4: 18, isLowerBetter: false },
-    오래달리기걷기: { grade1: 360, grade2: 410, grade3: 480, grade4: 560, isLowerBetter: true }, // 초 단위
-    앉아윗몸앞으로굽히기: { grade1: 22.0, grade2: 17.0, grade3: 11.0, grade4: 5.0, isLowerBetter: false },
-    악력: { grade1: 31.0, grade2: 27.0, grade3: 23.0, grade4: 19.0, isLowerBetter: false },
-    팔굽혀펴기: { grade1: 30, grade2: 22, grade3: 14, grade4: 7, isLowerBetter: false }, // 무릎대고
-    윗몸말아올리기: { grade1: 50, grade2: 38, grade3: 26, grade4: 15, isLowerBetter: false },
-    '50m달리기': { grade1: 8.7, grade2: 9.3, grade3: 10.1, grade4: 11.0, isLowerBetter: true },
-    제자리멀리뛰기: { grade1: 185, grade2: 170, grade3: 152, grade4: 133, isLowerBetter: false }
+    // 1. 심폐지구력
+    왕복오래달리기: { grade1: 48, grade2: 38, grade3: 28, grade4: 18, isLowerBetter: false }, // 횟수
+    오래달리기걷기: { grade1: 360, grade2: 410, grade3: 480, grade4: 560, isLowerBetter: true }, // 초 (6분)
+    스텝검사: { grade1: 60, grade2: 50, grade3: 40, grade4: 30, isLowerBetter: false }, // PEI 지수
+
+    // 2. 유연성
+    앉아윗몸앞으로굽히기: { grade1: 22.0, grade2: 17.0, grade3: 11.0, grade4: 5.0, isLowerBetter: false }, // cm
+
+    // 3. 근력 및 근지구력
+    악력: { grade1: 31.0, grade2: 27.0, grade3: 23.0, grade4: 19.0, isLowerBetter: false }, // kg
+    팔굽혀펴기: { grade1: 30, grade2: 22, grade3: 14, grade4: 7, isLowerBetter: false }, // 회 (무릎대고)
+    윗몸말아올리기: { grade1: 50, grade2: 38, grade3: 26, grade4: 15, isLowerBetter: false }, // 회
+
+    // 4. 순발력
+    '50m달리기': { grade1: 8.7, grade2: 9.3, grade3: 10.1, grade4: 11.0, isLowerBetter: true }, // 초
+    제자리멀리뛰기: { grade1: 185, grade2: 170, grade3: 152, grade4: 133, isLowerBetter: false } // cm
   }
-};
+} as const;
+
+// 하위 호환성 유지용 별칭
+export const PAPS_STANDARDS = HIGH_SCHOOL_GRADE1_PAPS_STANDARDS;
 
 export function evaluateGrade(
   value: number,

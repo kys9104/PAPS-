@@ -71,7 +71,7 @@ export function buildInitialStudentProfiles(): StudentProfile[] {
     studentNum: item.studentNum,
     name: item.name,
     gender: item.gender,
-    pin: '1234', // 기본 초기 PIN: 1234 (학생 개별 변경 가능)
+    pin: '0000', // 기본 초기 보안 PIN: 0000 (학생 개별 변경 가능)
     joinedAt: new Date().toISOString(),
     lastLoginAt: undefined
   }));

@@ -27,7 +27,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
   const [studentNum, setStudentNum] = useState<number>(1);
   const [name, setName] = useState<string>('곽승준');
   const [gender, setGender] = useState<'남' | '여'>('남');
-  const [pin, setPin] = useState<string>('1234');
+  const [pin, setPin] = useState<string>('0000');
   const [showPin, setShowPin] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -317,7 +317,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
                 type={showPin ? 'text' : 'password'}
                 required
                 maxLength={4}
-                placeholder="기본 비밀번호: 1234"
+                placeholder="기본 비밀번호: 0000"
                 value={pin}
                 onChange={(e) => setPin(e.target.value.replace(/[^0-9]/g, ''))}
                 className="w-full bg-[#0d172e] border border-[#1e2f5b] focus:border-[#E8FD3B] rounded-xl pl-8 pr-3 py-2 text-xs font-mono font-bold tracking-widest text-white outline-none"
@@ -325,7 +325,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
               <KeyRound className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
             </div>
             <p className="text-[10px] text-slate-400 leading-relaxed">
-              * 기본 초기 PIN은 <strong className="text-[#E8FD3B] font-mono font-bold">1234</strong>이며, 로그인 후 상단 프로필에서 언제든 본인만의 비밀번호로 변경할 수 있습니다.
+              * 기본 초기 PIN은 <strong className="text-[#E8FD3B] font-mono font-bold">0000</strong>이며, 로그인 후 상단 프로필에서 언제든 본인만의 비밀번호로 변경할 수 있습니다.
             </p>
           </div>
 

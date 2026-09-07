@@ -8,7 +8,8 @@ import {
   X,
   RefreshCw,
   Eye,
-  ChevronDown
+  ChevronDown,
+  FileSpreadsheet
 } from 'lucide-react';
 import { StudentProfile } from '../types';
 import { getAllStudents, resetStudentAllData, deleteAllPapsRecordsForStudent, deleteAllWorkoutLogsForStudent, resetStudentFittPlan } from '../services/storageService';
@@ -17,6 +18,7 @@ interface TeacherControlBarProps {
   currentStudent: StudentProfile | null;
   onSelectStudent: (student: StudentProfile) => void;
   onOpenTeacherModal?: () => void;
+  onOpenGasSettings?: () => void;
   onDataChanged?: () => void;
   onDataReset?: () => void;
 }
@@ -25,6 +27,7 @@ export const TeacherControlBar: React.FC<TeacherControlBarProps> = ({
   currentStudent,
   onSelectStudent,
   onOpenTeacherModal,
+  onOpenGasSettings,
   onDataChanged,
   onDataReset
 }) => {
@@ -120,11 +123,25 @@ export const TeacherControlBar: React.FC<TeacherControlBarProps> = ({
               </select>
             </div>
 
+            {/* GAS Webhook Settings Button */}
+            {onOpenGasSettings && (
+              <button
+                type="button"
+                onClick={onOpenGasSettings}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 transition font-bold cursor-pointer"
+                title="Google Apps Script(GAS) 스프레드시트 연동 URL 설정 및 테스트"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="hidden sm:inline">구글 시트 연동</span>
+                <span className="sm:hidden">GAS</span>
+              </button>
+            )}
+
             {/* Delete Record Button */}
             <button
               onClick={() => setIsDeleteModalOpen(true)}
               disabled={!currentStudent}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 transition font-bold disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 transition font-bold disabled:opacity-50 cursor-pointer"
               title="현재 조회 중인 학생의 PAPS 또는 운동 일지 삭제"
             >
               <Trash2 className="w-3.5 h-3.5 text-rose-400" />

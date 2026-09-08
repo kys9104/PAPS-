@@ -85,7 +85,7 @@ export const ExerciseGuideTab: React.FC<ExerciseGuideTabProps> = ({ onSelectForT
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="text-[11px] font-extrabold text-[#E8FD3B] bg-[#E8FD3B]/10 px-2.5 py-0.5 rounded-full border border-[#E8FD3B]/30">
-              4대 체력 요소 총 40종 완벽 가이드
+              4대 체력 요소 총 38종 완벽 가이드
             </span>
             <span className="text-xs text-sky-300 font-bold bg-sky-950/60 px-2.5 py-0.5 rounded-full border border-sky-800/60">
               신안해양과학고 체육 실습 라이브러리

@@ -55,7 +55,7 @@ export const Header: React.FC<HeaderProps> = ({
     { id: 'fitt', label: 'FITT 운동 처방 & 5차시', icon: BookOpen },
     { id: 'paps', label: 'PAPS 측정 & 등급 판정', icon: HeartPulse },
     { id: 'neis', label: '생활기록부 세특 생성기', icon: FileText },
-    { id: 'exercises', label: '4대 체력 운동 가이드 (40종)', icon: Activity },
+    { id: 'exercises', label: '4대 체력 운동 가이드', icon: Activity },
     { id: 'timer', label: '스마트 실습 타이머', icon: TimerIcon },
   ] as const;
 
@@ -116,21 +116,23 @@ export const Header: React.FC<HeaderProps> = ({
             </span>
           </div>
 
-          {/* Teacher Status or Login Button */}
+          {/* Teacher Mode vs Student Mode Separation */}
           {isTeacher ? (
-            <div className="flex items-center gap-2">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-[#142245] border border-[#E8FD3B]/30 text-white shadow-xs">
+            <div className="flex items-center gap-2 sm:gap-2.5">
+              {/* Teacher Official Badge & Logout */}
+              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-[#142245] border border-[#E8FD3B]/40 text-white shadow-xs">
                 <ShieldCheck className="w-4 h-4 text-[#E8FD3B] shrink-0" />
-                <span className="text-xs font-black text-[#E8FD3B]">체육교사 인증</span>
+                <span className="text-xs font-black text-[#E8FD3B]">체육교사 관리자</span>
                 <button
                   onClick={onTeacherLogout}
-                  className="text-[10px] font-bold text-slate-300 hover:text-rose-400 bg-[#0d172e] px-2 py-0.5 rounded-lg border border-[#1e2f5b] hover:border-rose-500/40 transition ml-0.5 cursor-pointer"
-                  title="교사 모드 로그아웃"
+                  className="text-[10px] font-bold text-slate-300 hover:text-rose-400 bg-[#0d172e] px-2 py-0.5 rounded-lg border border-[#1e2f5b] hover:border-rose-500/40 transition ml-1 cursor-pointer"
+                  title="체육교사 관리자 로그아웃"
                 >
                   로그아웃
                 </button>
               </div>
 
+              {/* Roster & Sync Button */}
               <button
                 onClick={onOpenTeacherModal}
                 className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-black bg-[#E8FD3B] hover:bg-[#d5eb28] transition shadow-[0_0_12px_rgba(232,253,59,0.25)] cursor-pointer"
@@ -139,66 +141,88 @@ export const Header: React.FC<HeaderProps> = ({
                 <Users className="w-3.5 h-3.5" />
                 <span>1학년 명렬표·연동</span>
               </button>
-            </div>
-          ) : (
-            <button
-              onClick={onOpenTeacherLogin}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-slate-300 bg-[#0d172e] hover:bg-[#142245] hover:text-[#E8FD3B] border border-[#1e2f5b] transition shadow-xs cursor-pointer"
-              title="신안해양과학고 체육교사 관리자 인증"
-            >
-              <Lock className="w-3.5 h-3.5 text-[#E8FD3B]" />
-              <span>체육교사 로그인</span>
-            </button>
-          )}
 
-          {/* Student Auth Box */}
-          {student ? (
-            <div className="flex items-center gap-2 bg-[#0d172e] border border-[#1e2f5b] rounded-2xl px-3 py-1.5 shadow-sm">
-              <button
-                type="button"
-                onClick={onOpenAuth}
-                title="학생 전환 또는 로그인 변경"
-                className="flex items-center gap-2 text-left hover:opacity-85 transition cursor-pointer"
-              >
-                <div className="w-8 h-8 rounded-xl bg-[#E8FD3B] text-black flex items-center justify-center font-black text-xs shadow-xs">
-                  {student.studentNum}
-                </div>
-                <div>
-                  <div className="font-extrabold text-white text-xs leading-tight">
+              {/* If Teacher is currently inspecting a specific student */}
+              {student && (
+                <div className="hidden md:flex items-center gap-2 bg-[#0d172e] border border-sky-500/40 rounded-2xl px-3 py-1.5 shadow-sm text-xs">
+                  <span className="w-2 h-2 rounded-full bg-sky-400 animate-pulse" />
+                  <span className="text-slate-400 text-[11px]">열람 중:</span>
+                  <span className="font-bold text-white text-xs">
                     1-{student.classNum} {student.name}
-                  </div>
-                  <div className="text-[10px] text-slate-400 font-medium">
-                    {student.gender}학생 ({student.id})
-                  </div>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={onLogout}
+                    className="text-[10px] text-slate-400 hover:text-rose-300 ml-1 underline cursor-pointer"
+                    title="해당 학생 열람 닫기"
+                  >
+                    열람 종료
+                  </button>
                 </div>
-              </button>
-
-              {/* Individual Password Reset Button */}
-              <button
-                type="button"
-                onClick={onOpenPasswordModal}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-[#E8FD3B] hover:bg-[#142245] border border-transparent hover:border-[#E8FD3B]/30 transition cursor-pointer"
-                title="개인 비밀번호(PIN) 재설정"
-              >
-                <KeyRound className="w-3.5 h-3.5" />
-              </button>
-
-              <button
-                onClick={onLogout}
-                className="text-slate-400 hover:text-rose-400 transition ml-0.5 p-1.5 rounded-lg hover:bg-rose-500/10 cursor-pointer"
-                title="학생 로그아웃"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-              </button>
+              )}
             </div>
           ) : (
-            <button
-              onClick={onOpenAuth}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold bg-[#E8FD3B] text-black hover:bg-[#d5eb28] transition shadow-[0_0_15px_rgba(232,253,59,0.3)] cursor-pointer"
-            >
-              <User className="w-3.5 h-3.5 stroke-[2.5]" />
-              학생 로그인 / 등록
-            </button>
+            <div className="flex items-center gap-2 sm:gap-3">
+              {/* Teacher Login Entry for Students view */}
+              <button
+                onClick={onOpenTeacherLogin}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-slate-300 bg-[#0d172e] hover:bg-[#142245] hover:text-[#E8FD3B] border border-[#1e2f5b] transition shadow-xs cursor-pointer"
+                title="신안해양과학고 체육교사 관리자 인증"
+              >
+                <Lock className="w-3.5 h-3.5 text-[#E8FD3B]" />
+                <span>체육교사 로그인</span>
+              </button>
+
+              {/* Student Auth Box */}
+              {student ? (
+                <div className="flex items-center gap-2 bg-[#0d172e] border border-[#1e2f5b] rounded-2xl px-3 py-1.5 shadow-sm">
+                  <button
+                    type="button"
+                    onClick={onOpenAuth}
+                    title="학생 전환 또는 로그인 변경"
+                    className="flex items-center gap-2 text-left hover:opacity-85 transition cursor-pointer"
+                  >
+                    <div className="w-8 h-8 rounded-xl bg-[#E8FD3B] text-black flex items-center justify-center font-black text-xs shadow-xs">
+                      {student.studentNum}
+                    </div>
+                    <div>
+                      <div className="font-extrabold text-white text-xs leading-tight">
+                        1-{student.classNum} {student.name}
+                      </div>
+                      <div className="text-[10px] text-slate-400 font-medium">
+                        {student.gender}학생 ({student.id})
+                      </div>
+                    </div>
+                  </button>
+
+                  {/* Individual Password Reset Button */}
+                  <button
+                    type="button"
+                    onClick={onOpenPasswordModal}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-[#E8FD3B] hover:bg-[#142245] border border-transparent hover:border-[#E8FD3B]/30 transition cursor-pointer"
+                    title="개인 비밀번호(PIN) 재설정"
+                  >
+                    <KeyRound className="w-3.5 h-3.5" />
+                  </button>
+
+                  <button
+                    onClick={onLogout}
+                    className="text-slate-400 hover:text-rose-400 transition ml-0.5 p-1.5 rounded-lg hover:bg-rose-500/10 cursor-pointer"
+                    title="학생 로그아웃"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={onOpenAuth}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold bg-[#E8FD3B] text-black hover:bg-[#d5eb28] transition shadow-[0_0_15px_rgba(232,253,59,0.3)] cursor-pointer"
+                >
+                  <User className="w-3.5 h-3.5 stroke-[2.5]" />
+                  학생 로그인 / 등록
+                </button>
+              )}
+            </div>
           )}
         </div>
       </div>

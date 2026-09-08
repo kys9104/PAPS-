@@ -15,39 +15,49 @@ export interface StandardThreshold {
 export const HIGH_SCHOOL_GRADE1_PAPS_STANDARDS = {
   남: {
     // 1. 심폐지구력
-    왕복오래달리기: { grade1: 77, grade2: 62, grade3: 47, grade4: 31, isLowerBetter: false }, // 횟수
-    오래달리기걷기: { grade1: 390, grade2: 440, grade3: 510, grade4: 600, isLowerBetter: true }, // 초 (6분30초)
-    스텝검사: { grade1: 65, grade2: 55, grade3: 45, grade4: 35, isLowerBetter: false }, // PEI 지수
+    왕복오래달리기: { grade1: 70, grade2: 56, grade3: 42, grade4: 26, isLowerBetter: false }, // 횟수 (1등급: 70~80이상, 2등급: 56~69, 3등급: 42~55, 4등급: 26~41, 5등급: 25이하)
+    오래달리기걷기: { grade1: 398, grade2: 457, grade3: 551, grade4: 639, isLowerBetter: true }, // 초 (1600m, 1등급: 398이하, 2등급: 399~457, 3등급: 458~551, 4등급: 552~639, 5등급: 640이상)
+    '오래달리기-걷기': { grade1: 398, grade2: 457, grade3: 551, grade4: 639, isLowerBetter: true },
+    스텝검사: { grade1: 76.0, grade2: 62.0, grade3: 52.0, grade4: 47.0, isLowerBetter: false }, // PEI 지수
 
     // 2. 유연성
-    앉아윗몸앞으로굽히기: { grade1: 19.0, grade2: 13.0, grade3: 6.0, grade4: -1.0, isLowerBetter: false }, // cm
+    앉아윗몸앞으로굽히기: { grade1: 13.0, grade2: 9.0, grade3: 4.0, grade4: -2.0, isLowerBetter: false }, // cm (1등급: 13.0이상, 2등급: 9.0~12.9, 3등급: 4.0~8.9, 4등급: -2.0~3.9, 5등급: -2.1이하)
+    '앉아 윗몸 앞으로 굽히기': { grade1: 13.0, grade2: 9.0, grade3: 4.0, grade4: -2.0, isLowerBetter: false },
 
     // 3. 근력 및 근지구력
-    악력: { grade1: 48.0, grade2: 42.0, grade3: 36.0, grade4: 30.0, isLowerBetter: false }, // kg
-    팔굽혀펴기: { grade1: 45, grade2: 35, grade3: 24, grade4: 14, isLowerBetter: false }, // 회
-    윗몸말아올리기: { grade1: 70, grade2: 55, grade3: 40, grade4: 25, isLowerBetter: false }, // 회
+    악력: { grade1: 61.0, grade2: 42.5, grade3: 35.5, grade4: 29.0, isLowerBetter: false }, // kg (1등급: 61.0이상, 2등급: 42.5~60.9, 3등급: 35.5~42.4, 4등급: 29.0~35.4, 5등급: 28.9이하)
+    팔굽혀펴기: { grade1: 46, grade2: 30, grade3: 16, grade4: 7, isLowerBetter: false }, // 회 (1등급: 46이상, 2등급: 30~45, 3등급: 16~29, 4등급: 7~15, 5등급: 6이하)
+    무릎대고팔굽혀펴기: { grade1: 46, grade2: 30, grade3: 16, grade4: 7, isLowerBetter: false },
+    윗몸말아올리기: { grade1: 90, grade2: 60, grade3: 35, grade4: 15, isLowerBetter: false }, // 회 (1등급: 90이상, 2등급: 60~89, 3등급: 35~59, 4등급: 15~34, 5등급: 14이하)
 
     // 4. 순발력
-    '50m달리기': { grade1: 7.2, grade2: 7.7, grade3: 8.3, grade4: 9.1, isLowerBetter: true }, // 초
-    제자리멀리뛰기: { grade1: 240, grade2: 225, grade3: 208, grade4: 188, isLowerBetter: false } // cm
+    '50m달리기': { grade1: 7.00, grade2: 7.60, grade3: 8.10, grade4: 10.00, isLowerBetter: true }, // 초 (1등급: 7.00이하, 2등급: 7.01~7.60, 3등급: 7.61~8.10, 4등급: 8.11~10.00, 5등급: 10.01이상)
+    '50m 달리기': { grade1: 7.00, grade2: 7.60, grade3: 8.10, grade4: 10.00, isLowerBetter: true },
+    제자리멀리뛰기: { grade1: 255.1, grade2: 216.1, grade3: 195.1, grade4: 160.1, isLowerBetter: false }, // cm (1등급: 255.1이상, 2등급: 216.1~255, 3등급: 195.1~216, 4등급: 160.1~195, 5등급: 160이하)
+    '제자리 멀리뛰기': { grade1: 255.1, grade2: 216.1, grade3: 195.1, grade4: 160.1, isLowerBetter: false }
   },
   여: {
     // 1. 심폐지구력
-    왕복오래달리기: { grade1: 48, grade2: 38, grade3: 28, grade4: 18, isLowerBetter: false }, // 횟수
-    오래달리기걷기: { grade1: 360, grade2: 410, grade3: 480, grade4: 560, isLowerBetter: true }, // 초 (6분)
-    스텝검사: { grade1: 60, grade2: 50, grade3: 40, grade4: 30, isLowerBetter: false }, // PEI 지수
+    왕복오래달리기: { grade1: 50, grade2: 37, grade3: 25, grade4: 17, isLowerBetter: false }, // 횟수 (1등급: 50이상, 2등급: 37~49, 3등급: 25~36, 4등급: 17~24, 5등급: 16이하)
+    오래달리기걷기: { grade1: 379, grade2: 442, grade3: 517, grade4: 608, isLowerBetter: true }, // 초 (1200m, 1등급: 379이하, 2등급: 380~442, 3등급: 443~517, 4등급: 518~608, 5등급: 609이상)
+    '오래달리기-걷기': { grade1: 379, grade2: 442, grade3: 517, grade4: 608, isLowerBetter: true },
+    스텝검사: { grade1: 76.0, grade2: 62.0, grade3: 52.0, grade4: 47.0, isLowerBetter: false }, // PEI 지수
 
     // 2. 유연성
-    앉아윗몸앞으로굽히기: { grade1: 22.0, grade2: 17.0, grade3: 11.0, grade4: 5.0, isLowerBetter: false }, // cm
+    앉아윗몸앞으로굽히기: { grade1: 16.0, grade2: 11.0, grade3: 8.0, grade4: 2.0, isLowerBetter: false }, // cm (1등급: 16.0이상, 2등급: 11.0~15.9, 3등급: 8.0~10.9, 4등급: 2.0~7.9, 5등급: 1.9이하)
+    '앉아 윗몸 앞으로 굽히기': { grade1: 16.0, grade2: 11.0, grade3: 8.0, grade4: 2.0, isLowerBetter: false },
 
     // 3. 근력 및 근지구력
-    악력: { grade1: 31.0, grade2: 27.0, grade3: 23.0, grade4: 19.0, isLowerBetter: false }, // kg
-    팔굽혀펴기: { grade1: 30, grade2: 22, grade3: 14, grade4: 7, isLowerBetter: false }, // 회 (무릎대고)
-    윗몸말아올리기: { grade1: 50, grade2: 38, grade3: 26, grade4: 15, isLowerBetter: false }, // 회
+    악력: { grade1: 36.0, grade2: 29.0, grade3: 23.0, grade4: 16.5, isLowerBetter: false }, // kg (1등급: 36.0이상, 2등급: 29.0~35.9, 3등급: 23.0~28.9, 4등급: 16.5~22.9, 5등급: 16.4이하)
+    팔굽혀펴기: { grade1: 40, grade2: 24, grade3: 14, grade4: 6, isLowerBetter: false }, // 회 (무릎대고팔굽혀펴기, 1등급: 40이상, 2등급: 24~39, 3등급: 14~23, 4등급: 6~13, 5등급: 5이하)
+    무릎대고팔굽혀펴기: { grade1: 40, grade2: 24, grade3: 14, grade4: 6, isLowerBetter: false },
+    윗몸말아올리기: { grade1: 40, grade2: 30, grade3: 13, grade4: 4, isLowerBetter: false }, // 회 (1등급: 40이상, 2등급: 30~39, 3등급: 13~29, 4등급: 4~12, 5등급: 3이하)
 
     // 4. 순발력
-    '50m달리기': { grade1: 8.7, grade2: 9.3, grade3: 10.1, grade4: 11.0, isLowerBetter: true }, // 초
-    제자리멀리뛰기: { grade1: 185, grade2: 170, grade3: 152, grade4: 133, isLowerBetter: false } // cm
+    '50m달리기': { grade1: 8.80, grade2: 9.80, grade3: 10.50, grade4: 12.20, isLowerBetter: true }, // 초 (1등급: 8.80이하, 2등급: 8.81~9.80, 3등급: 9.81~10.50, 4등급: 10.51~12.20, 5등급: 12.21이상)
+    '50m 달리기': { grade1: 8.80, grade2: 9.80, grade3: 10.50, grade4: 12.20, isLowerBetter: true },
+    제자리멀리뛰기: { grade1: 186.1, grade2: 159.1, grade3: 139.1, grade4: 100.1, isLowerBetter: false }, // cm (1등급: 186.1이상, 2등급: 159.1~186, 3등급: 139.1~159, 4등급: 100.1~139, 5등급: 100이하)
+    '제자리 멀리뛰기': { grade1: 186.1, grade2: 159.1, grade3: 139.1, grade4: 100.1, isLowerBetter: false }
   }
 } as const;
 
@@ -56,9 +66,16 @@ export const PAPS_STANDARDS = HIGH_SCHOOL_GRADE1_PAPS_STANDARDS;
 
 export function evaluateGrade(
   value: number,
-  threshold: StandardThreshold
+  threshold?: StandardThreshold | null
 ): { grade: number; score: number } {
-  const { grade1, grade2, grade3, grade4, isLowerBetter } = threshold;
+  if (!threshold || typeof threshold !== 'object') {
+    return { grade: 3, score: 12 };
+  }
+  const { grade1, grade2, grade3, grade4, isLowerBetter = false } = threshold;
+  if (grade1 === undefined || grade2 === undefined || grade3 === undefined || grade4 === undefined) {
+    return { grade: 3, score: 12 };
+  }
+
   let grade = 5;
 
   if (isLowerBetter) {
@@ -80,7 +97,17 @@ export function evaluateGrade(
   return { grade, score };
 }
 
-export function evaluateBMI(heightCm: number, weightKg: number): {
+/**
+ * [신체능력검사(필수평가) 비만 평가 기준: BMI (kg/m²)]
+ * 고등학교 1학년 기준 (남자/여자 구분)
+ * 남자: 마름 <= 16.7, 정상 16.8~24.6, 과체중 24.7~24.9, 경도비만 25.0~29.9, 고도비만 >= 30.0
+ * 여자: 마름 <= 16.7, 정상 16.8~23.6, 과체중 23.7~24.9, 경도비만 25.0~29.9, 고도비만 >= 30.0
+ */
+export function evaluateBMI(
+  heightCm: number,
+  weightKg: number,
+  gender: '남' | '여' = '남'
+): {
   bmi: number;
   grade: number;
   score: number;
@@ -93,20 +120,22 @@ export function evaluateBMI(heightCm: number, weightKg: number): {
   const bmi = Number((weightKg / (heightM * heightM)).toFixed(1));
 
   let grade = 1;
-  let status = '정상체중';
+  let status = '표준 (정상체중)';
 
-  if (bmi < 18.5) {
+  const normalMax = gender === '여' ? 23.6 : 24.6;
+
+  if (bmi <= 16.7) {
     grade = 3;
-    status = '저체중';
-  } else if (bmi >= 18.5 && bmi <= 22.9) {
+    status = '저체중 (마름)';
+  } else if (bmi <= normalMax) {
     grade = 1;
     status = '표준 (정상체중)';
-  } else if (bmi >= 23.0 && bmi <= 24.9) {
+  } else if (bmi <= 24.9) {
     grade = 2;
     status = '과체중';
-  } else if (bmi >= 25.0 && bmi <= 29.9) {
+  } else if (bmi <= 29.9) {
     grade = 4;
-    status = '비만 (1단계)';
+    status = '경도비만 (1단계)';
   } else {
     grade = 5;
     status = '고도비만 (2단계 이상)';

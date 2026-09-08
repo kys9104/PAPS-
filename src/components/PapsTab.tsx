@@ -83,19 +83,22 @@ export const PapsTab: React.FC<PapsTabProps> = ({
 
   // Grade Calculations
   const evaluations = useMemo(() => {
-    const cardioStandard = PAPS_STANDARDS[gender][cardioTest];
+    const safeGender: '남' | '여' = gender === '여' ? '여' : '남';
+    const standards = PAPS_STANDARDS[safeGender] || PAPS_STANDARDS['남'];
+
+    const cardioStandard = (standards as any)[cardioTest] || standards.왕복오래달리기;
     const cardio = evaluateGrade(cardioVal, cardioStandard);
 
-    const flexibilityStandard = PAPS_STANDARDS[gender][flexibilityTest];
+    const flexibilityStandard = (standards as any)[flexibilityTest] || standards.앉아윗몸앞으로굽히기;
     const flexibility = evaluateGrade(flexibilityVal, flexibilityStandard);
 
-    const strengthStandard = PAPS_STANDARDS[gender][strengthTest];
+    const strengthStandard = (standards as any)[strengthTest] || standards.악력;
     const strength = evaluateGrade(strengthVal, strengthStandard);
 
-    const agilityStandard = PAPS_STANDARDS[gender][agilityTest];
+    const agilityStandard = (standards as any)[agilityTest] || standards.제자리멀리뛰기;
     const agility = evaluateGrade(agilityVal, agilityStandard);
 
-    const bodyComp = evaluateBMI(heightCm, weightKg);
+    const bodyComp = evaluateBMI(heightCm, weightKg, safeGender);
 
     const totalScore = cardio.score + flexibility.score + strength.score + agility.score + bodyComp.score;
     const overallGrade = getOverallGrade(totalScore);
@@ -338,7 +341,7 @@ export const PapsTab: React.FC<PapsTabProps> = ({
                 className="w-full bg-[#070e1e] border border-[#1e2f5b] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#E8FD3B]"
               >
                 <option value="왕복오래달리기">왕복오래달리기 (셔틀런, 회)</option>
-                <option value="오래달리기-걷기">오래달리기-걷기 (초)</option>
+                <option value="오래달리기걷기">오래달리기걷기 (초)</option>
                 <option value="스텝검사">스텝검사 (PEI 지수)</option>
               </select>
             </div>
@@ -359,7 +362,7 @@ export const PapsTab: React.FC<PapsTabProps> = ({
                 className="w-full bg-[#070e1e] border border-[#1e2f5b] focus:border-[#E8FD3B] rounded-xl px-3 py-2 text-sm text-white focus:outline-none font-mono font-bold"
               />
               <div className="flex justify-between text-[10px] text-slate-500 mt-1">
-                <span>1등급: {cardioTest === '왕복오래달리기' ? (gender === '남' ? '77회 이상' : '48회 이상') : '기준표 참조'}</span>
+                <span>1등급: {cardioTest === '왕복오래달리기' ? (gender === '남' ? '70회 이상' : '50회 이상') : '기준표 참조'}</span>
               </div>
             </div>
           </div>
@@ -449,7 +452,7 @@ export const PapsTab: React.FC<PapsTabProps> = ({
                 className="w-full bg-[#070e1e] border border-[#1e2f5b] focus:border-[#E8FD3B] rounded-xl px-3 py-2 text-sm text-white focus:outline-none font-mono font-bold"
               />
               <div className="flex justify-between text-[10px] text-slate-500 mt-1">
-                <span>1등급: {strengthTest === '악력' ? (gender === '남' ? '49.0kg 이상' : '30.0kg 이상') : '기준표 참조'}</span>
+                <span>1등급: {strengthTest === '악력' ? (gender === '남' ? '61.0kg 이상' : '36.0kg 이상') : '기준표 참조'}</span>
               </div>
             </div>
           </div>
@@ -497,7 +500,7 @@ export const PapsTab: React.FC<PapsTabProps> = ({
                 className="w-full bg-[#070e1e] border border-[#1e2f5b] focus:border-amber-400 rounded-xl px-3 py-2 text-sm text-white focus:outline-none font-mono font-bold"
               />
               <div className="flex justify-between text-[10px] text-slate-500 mt-1">
-                <span>1등급: {agilityTest === '제자리멀리뛰기' ? (gender === '남' ? '240cm 이상' : '185cm 이상') : (gender === '남' ? '7.2초 이하' : '8.7초 이하')}</span>
+                <span>1등급: {agilityTest === '제자리멀리뛰기' ? (gender === '남' ? '255.1cm 이상' : '186.1cm 이상') : (gender === '남' ? '7.00초 이하' : '8.80초 이하')}</span>
               </div>
             </div>
           </div>

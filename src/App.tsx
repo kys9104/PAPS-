@@ -54,9 +54,15 @@ export default function App() {
   const [workoutLogs, setWorkoutLogs] = useState<WorkoutLog[]>([]);
 
   // First Screen Login Gate (학생/교사 인증 상태)
+  // 처음 접속 시 반드시 로그인 화면이 먼저 나오도록 명시적 활성 세션 확인
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
-    // 만약 기존 세션이 있다면 복원, 없으면 첫 화면 로그인 표시
-    return Boolean(getCurrentStudent() || isTeacherAuthenticated());
+    try {
+      const hasActiveSession = sessionStorage.getItem('shinan_session_active') === 'true';
+      if (!hasActiveSession) return false;
+      return Boolean(getCurrentStudent() || isTeacherAuthenticated());
+    } catch {
+      return false;
+    }
   });
 
   // Modals & Teacher Auth
@@ -85,29 +91,16 @@ export default function App() {
     setWorkoutLogs(getStudentWorkoutLogs(activeStudent.id));
   };
 
-  // Initial Data Bootstrap
+  // Initial Data Bootstrap: 기본 샘플 기록 시딩 (단, 학생을 임의로 자동 로그인시키지 않음)
   useEffect(() => {
-    let activeStudent = getCurrentStudent();
+    const sampleStudentId = '1-1-01';
+    const existingPaps = getStudentPapsRecords(sampleStudentId);
 
-    // If no student exists or mock student, seed the first official Shinan student (곽승준)
-    if (!activeStudent || activeStudent.name === '김해양') {
-      activeStudent = {
-        id: '1-1-01',
-        grade: 1,
-        classNum: 1,
-        studentNum: 1,
-        name: '곽승준',
-        gender: '남',
-        pin: '0000',
-        joinedAt: new Date().toISOString(),
-        lastLoginAt: new Date().toISOString()
-      };
-      setCurrentStudent(activeStudent);
-
-      // Seed initial sample PAPS record for Gwak Seung-jun
+    // 샘플 데이터가 전혀 없을 때 1-1-01용 초기 레코드만 조용히 백그라운드 시딩
+    if (existingPaps.length === 0) {
       const samplePaps: PAPSRecord = {
-        id: `paps_sample_${activeStudent.id}`,
-        studentId: activeStudent.id,
+        id: `paps_sample_${sampleStudentId}`,
+        studentId: sampleStudentId,
         date: new Date().toISOString().split('T')[0],
         gender: '남',
         cardio: {
@@ -121,8 +114,8 @@ export default function App() {
           testType: '앉아윗몸앞으로굽히기',
           value: 16.5,
           unit: 'cm',
-          grade: 2,
-          score: 16
+          grade: 1,
+          score: 20
         },
         strength: {
           testType: '악력',
@@ -144,18 +137,17 @@ export default function App() {
           bmi: 21.4,
           grade: 1,
           score: 20,
-          status: '정상'
+          status: '표준 (정상체중)'
         },
-        totalScore: 84,
+        totalScore: 88,
         overallGrade: 1,
         neisNote:
           '신안해양과학고 1학년 체육 수업에서 왕복오래달리기 68회, 제자리멀리뛰기 235cm를 기록하며 전 영역에서 고른 기초 체력을 과시함. 과부하 및 점진성의 원리를 이해하고 주 4회 규칙적인 인터벌 트레이닝을 성실히 이행함.'
       };
       savePapsRecord(samplePaps);
 
-      // Seed sample FITT plan
       const sampleFitt: FITTPlan = {
-        studentId: activeStudent.id,
+        studentId: sampleStudentId,
         updatedAt: new Date().toISOString(),
         frequency: '주 4회 (월, 수, 금, 토 방과후)',
         intensity: 'RPE 7~8 (약간 힘들다 / 심박수 145~165bpm)',
@@ -174,14 +166,11 @@ export default function App() {
         }
       };
       saveStudentFittPlan(sampleFitt);
+      saveStudentLessonPlans(sampleStudentId, DEFAULT_LESSON_PLANS);
 
-      // Seed sample lesson plans
-      saveStudentLessonPlans(activeStudent.id, DEFAULT_LESSON_PLANS);
-
-      // Seed sample workout log
       const sampleLog: WorkoutLog = {
         id: `sample_log_1`,
-        studentId: activeStudent.id,
+        studentId: sampleStudentId,
         date: new Date().toISOString().split('T')[0],
         exerciseName: '20m 셔틀런 인터벌 트레이닝',
         category: '심폐지구력',
@@ -194,10 +183,22 @@ export default function App() {
       saveWorkoutLog(sampleLog);
     }
 
-    refreshStudentData(activeStudent);
+    // 세션이 유효하고 로그인된 학생이 있는 경우에만 학생 데이터를 불러옴
+    const hasActiveSession = sessionStorage.getItem('shinan_session_active') === 'true';
+    const activeStudent = getCurrentStudent();
+
+    if (hasActiveSession && activeStudent) {
+      refreshStudentData(activeStudent);
+    } else if (!isTeacherAuthenticated()) {
+      // 첫 화면은 로그인 화면이어야 하므로 임의 자동 로그인 제거
+      setStudent(null);
+    }
   }, []);
 
   const handleStudentLoginFromView = (selectedStudent: StudentProfile) => {
+    try {
+      sessionStorage.setItem('shinan_session_active', 'true');
+    } catch {}
     setCurrentStudent(selectedStudent);
     refreshStudentData(selectedStudent);
     setIsTeacher(false);
@@ -207,27 +208,30 @@ export default function App() {
   };
 
   const handleTeacherLoginFromView = () => {
+    try {
+      sessionStorage.setItem('shinan_session_active', 'true');
+    } catch {}
     setIsTeacher(true);
     setTeacherAuthenticated(true);
-    let activeStudent = getCurrentStudent();
-    if (!activeStudent) {
-      const all = getAllStudents();
-      if (all.length > 0) {
-        activeStudent = all[0];
-        setCurrentStudent(activeStudent);
-        refreshStudentData(activeStudent);
-      }
-    }
+    // 중요: 교사 로그인 시 학생 계정은 자동 연결하지 않고 온전히 교사 관리자 모드로 분리
+    setCurrentStudent(null);
+    setStudent(null);
     setIsLoggedIn(true);
     setCurrentTab('all-students');
   };
 
   const handleAuthSuccess = (authenticatedStudent: StudentProfile) => {
+    try {
+      sessionStorage.setItem('shinan_session_active', 'true');
+    } catch {}
     refreshStudentData(authenticatedStudent);
     setIsLoggedIn(true);
   };
 
   const handleLogout = () => {
+    try {
+      sessionStorage.removeItem('shinan_session_active');
+    } catch {}
     setCurrentStudent(null);
     setStudent(null);
     setIsTeacher(false);
@@ -236,14 +240,25 @@ export default function App() {
   };
 
   const handleTeacherLogout = () => {
+    try {
+      sessionStorage.removeItem('shinan_session_active');
+    } catch {}
     setTeacherAuthenticated(false);
     setIsTeacher(false);
     setIsTeacherModalOpen(false);
+    setCurrentStudent(null);
+    setStudent(null);
     setIsLoggedIn(false);
   };
 
   const handleTeacherLoginSuccess = () => {
+    try {
+      sessionStorage.setItem('shinan_session_active', 'true');
+    } catch {}
     setIsTeacher(true);
+    setTeacherAuthenticated(true);
+    setCurrentStudent(null);
+    setStudent(null);
     setIsTeacherLoginOpen(false);
     setIsTeacherModalOpen(true);
   };
@@ -395,6 +410,7 @@ export default function App() {
         {currentTab === 'timer' && (
           <TimerTab
             student={student}
+            fittPlan={fittPlan}
             lessonPlans={lessonPlans}
             appliedLessonPlan={appliedLessonPlan}
             initialExerciseName={timerExercise.name}

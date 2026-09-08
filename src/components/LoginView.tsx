@@ -37,10 +37,10 @@ export const LoginView: React.FC<LoginViewProps> = ({
 }) => {
   const [roleTab, setRoleTab] = useState<'student' | 'teacher'>('student');
 
-  // 학생 로그인 상태 (초기 보안 PIN: 0000)
+  // 학생 로그인 상태 (초기: 특정 학생이 자동 지정되지 않고 본인 이름 선택하도록 안내)
   const [selectedClass, setSelectedClass] = useState<number>(1);
-  const [selectedStudentNum, setSelectedStudentNum] = useState<number>(1);
-  const [studentName, setStudentName] = useState<string>('곽승준');
+  const [selectedStudentNum, setSelectedStudentNum] = useState<number>(0);
+  const [studentName, setStudentName] = useState<string>('');
   const [studentGender, setStudentGender] = useState<'남' | '여'>('남');
   const [studentPin, setStudentPin] = useState<string>('0000');
   const [studentError, setStudentError] = useState<string | null>(null);
@@ -65,6 +65,12 @@ export const LoginView: React.FC<LoginViewProps> = ({
   const handleStudentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setStudentError(null);
+
+    if (!selectedStudentNum || !studentName.trim()) {
+      setStudentError('아래 학생 명단에서 본인의 이름을 클릭하여 선택해주세요.');
+      return;
+    }
+
     setIsStudentSubmitting(true);
 
     try {
@@ -106,9 +112,8 @@ export const LoginView: React.FC<LoginViewProps> = ({
         onTeacherLogin();
       }
       if (onLoginSuccess) {
-        const allStudents = getAllStudents();
-        const firstStudent = allStudents.length > 0 ? allStudents[0] : null;
-        onLoginSuccess(firstStudent, true);
+        // 교사 로그인 시 학생 계정은 연결하지 않고 온전히 교사 모드로만 로그인
+        onLoginSuccess(null, true);
       }
     } else {
       setTeacherError('교사 관리자 비밀번호가 일치하지 않습니다. 다시 확인해주세요.');
@@ -229,8 +234,8 @@ export const LoginView: React.FC<LoginViewProps> = ({
                     type="button"
                     onClick={() => {
                       setSelectedClass(1);
-                      const first = SHINAN_OFFICIAL_STUDENTS.find((s) => s.classNum === 1);
-                      if (first) handleSelectOfficialStudent(first);
+                      setSelectedStudentNum(0);
+                      setStudentName('');
                     }}
                     className={`flex-1 py-1.5 rounded-xl text-xs font-black transition cursor-pointer ${
                       selectedClass === 1
@@ -244,8 +249,8 @@ export const LoginView: React.FC<LoginViewProps> = ({
                     type="button"
                     onClick={() => {
                       setSelectedClass(2);
-                      const first = SHINAN_OFFICIAL_STUDENTS.find((s) => s.classNum === 2);
-                      if (first) handleSelectOfficialStudent(first);
+                      setSelectedStudentNum(0);
+                      setStudentName('');
                     }}
                     className={`flex-1 py-1.5 rounded-xl text-xs font-black transition cursor-pointer ${
                       selectedClass === 2
@@ -290,7 +295,9 @@ export const LoginView: React.FC<LoginViewProps> = ({
                       선택 학번
                     </label>
                     <div className="w-full bg-[#070e1e] border border-[#1e2f5b] rounded-xl px-3 py-2 text-xs font-mono font-bold text-white">
-                      1학년 {selectedClass}반 {selectedStudentNum}번
+                      {selectedStudentNum > 0
+                        ? `1학년 ${selectedClass}반 ${selectedStudentNum}번`
+                        : '명단에서 선택'}
                     </div>
                   </div>
                   <div>
@@ -301,6 +308,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
                       type="text"
                       value={studentName}
                       onChange={(e) => setStudentName(e.target.value)}
+                      placeholder="명단 클릭 또는 입력"
                       required
                       className="w-full bg-[#070e1e] border border-[#1e2f5b] focus:border-[#E8FD3B] rounded-xl px-3 py-2 text-xs font-bold text-white outline-none"
                     />

@@ -17,7 +17,7 @@ import {
   X
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { StudentProfile, WorkoutLog, LessonPlan } from '../types';
+import { StudentProfile, WorkoutLog, LessonPlan, FITTPlan } from '../types';
 import {
   playCountdownTick,
   playWorkStartBeep,
@@ -28,11 +28,13 @@ import {
   saveWorkoutLog,
   syncToGoogleSheet,
   DEFAULT_LESSON_PLANS,
-  getStudentLessonPlans
+  getStudentLessonPlans,
+  getStudentFittPlan
 } from '../services/storageService';
 
 interface TimerTabProps {
   student: StudentProfile | null;
+  fittPlan?: FITTPlan | null;
   lessonPlans?: LessonPlan[];
   appliedLessonPlan?: LessonPlan | null;
   initialExerciseName?: string;
@@ -48,6 +50,7 @@ type TimerMode = 'interval' | 'stopwatch';
 
 export const TimerTab: React.FC<TimerTabProps> = ({
   student,
+  fittPlan: propFittPlan,
   lessonPlans = [],
   appliedLessonPlan,
   initialExerciseName = '20m 셔틀런 인터벌 트레이닝',
@@ -74,6 +77,13 @@ export const TimerTab: React.FC<TimerTabProps> = ({
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
 
+  // Active Plan tracking (for 8 main exercises execution)
+  const [activeLessonPlan, setActiveLessonPlan] = useState<LessonPlan | null>(appliedLessonPlan || null);
+
+  // Effective FITT plan
+  const effectiveFittPlan: FITTPlan | null =
+    propFittPlan || (student ? getStudentFittPlan(student.id) : null);
+
   // Stopwatch State
   const [stopwatchSeconds, setStopwatchSeconds] = useState<number>(0);
   const [isStopwatchRunning, setIsStopwatchRunning] = useState<boolean>(false);
@@ -90,25 +100,133 @@ export const TimerTab: React.FC<TimerTabProps> = ({
   const timerRef = useRef<number | null>(null);
   const stopwatchRef = useRef<number | null>(null);
 
+  // Active 5-lesson plans (passed via props, or student stored, or default)
+  const effectiveLessonPlans: LessonPlan[] =
+    lessonPlans.length > 0
+      ? lessonPlans
+      : student
+      ? getStudentLessonPlans(student.id)
+      : DEFAULT_LESSON_PLANS;
+
+  // 학생이 작성한 차시 계획서(8개 본운동 + 운동/휴식시간 + 반복횟수) 전체를 타이머에 완전 연동
+  const applyFullLessonPlan = (plan: LessonPlan) => {
+    setIsRunning(false);
+    setCurrentPhase('idle');
+    setActiveLessonPlan(plan);
+
+    const wTime = plan.workTimeSeconds || 40;
+    const rTime = plan.restTimeSeconds || 20;
+    const sets = plan.mainExercises?.length || plan.setsCount || 8;
+
+    setWorkTime(wTime);
+    setRestTime(rTime);
+    setTotalSets(sets);
+    setTimeLeft(prepTime);
+    setCurrentSet(1);
+    setReps(0);
+
+    const firstEx = plan.mainExercises?.[0];
+    const initialName = firstEx?.name || plan.title;
+    const initialCat = firstEx?.category || plan.targetFactor || '맞춤형 체력';
+
+    let initialReps = 15;
+    if (firstEx?.durationOrReps) {
+      const match = firstEx.durationOrReps.match(/(\d+)/);
+      if (match) initialReps = parseInt(match[1], 10);
+    }
+
+    setTargetReps(initialReps);
+    setExerciseName(initialName);
+    setCategory(initialCat);
+    setMemo(`${plan.title} 8개 본운동 실습 [1세트: ${initialName}]`);
+  };
+
+  // 학생이 작성한 FITT 운동 처방 계획 기반 타이머 자동 설정
+  const applyFittPrescription = (fp: FITTPlan) => {
+    setIsRunning(false);
+    setCurrentPhase('idle');
+    setActiveLessonPlan(null);
+
+    let wTime = 40;
+    let rTime = 20;
+    let sets = 8;
+    let autoReps = 15;
+    let autoName = fp.type || 'FITT 맞춤 운동 처방 루틴';
+    let autoCategory = '맞춤형 체력';
+
+    const typeStr = (fp.type || '').toLowerCase();
+    if (typeStr.includes('셔틀런') || typeStr.includes('오래달리기') || typeStr.includes('달리기') || typeStr.includes('심폐')) {
+      wTime = 120;
+      rTime = 60;
+      sets = 4;
+      autoReps = 20;
+      autoCategory = '심폐지구력';
+    } else if (typeStr.includes('스쿼트') || typeStr.includes('푸시업') || typeStr.includes('근력') || typeStr.includes('악력')) {
+      wTime = 40;
+      rTime = 20;
+      sets = 6;
+      autoReps = 15;
+      autoCategory = '근력 및 근지구력';
+    } else if (typeStr.includes('스트레칭') || typeStr.includes('유연성') || typeStr.includes('좌전굴')) {
+      wTime = 30;
+      rTime = 10;
+      sets = 6;
+      autoReps = 5;
+      autoCategory = '유연성';
+    } else if (typeStr.includes('점프') || typeStr.includes('제자리') || typeStr.includes('순발력')) {
+      wTime = 20;
+      rTime = 15;
+      sets = 6;
+      autoReps = 10;
+      autoCategory = '순발력';
+    }
+
+    setWorkTime(wTime);
+    setRestTime(rTime);
+    setTotalSets(sets);
+    setTimeLeft(prepTime);
+    setCurrentSet(1);
+    setReps(0);
+    setTargetReps(autoReps);
+    setExerciseName(autoName);
+    setCategory(autoCategory);
+    setMemo(`FITT 처방 실습: ${fp.goalStatement || autoName}`);
+  };
+
   // FITT 탭에서 인터벌 연동 요청 시 자동 세팅
   useEffect(() => {
     if (appliedLessonPlan) {
-      setIsRunning(false);
-      setCurrentPhase('idle');
-      const wTime = appliedLessonPlan.workTimeSeconds || 40;
-      const rTime = appliedLessonPlan.restTimeSeconds || 20;
-      const sets = appliedLessonPlan.mainExercises?.length || appliedLessonPlan.setsCount || 8;
-
-      setWorkTime(wTime);
-      setRestTime(rTime);
-      setTotalSets(sets);
-      setTimeLeft(5);
-      setCurrentSet(1);
-      setExerciseName(appliedLessonPlan.title);
-      setCategory(appliedLessonPlan.targetFactor || '맞춤형 체력');
-      setMemo(`${appliedLessonPlan.title} 8개 본운동 인터벌 순환 완주`);
+      applyFullLessonPlan(appliedLessonPlan);
     }
   }, [appliedLessonPlan]);
+
+  // 현재 진행 세트에 따른 본운동 슬롯 및 다음 본운동 추출
+  const currentExerciseItem =
+    activeLessonPlan && activeLessonPlan.mainExercises && activeLessonPlan.mainExercises.length > 0
+      ? activeLessonPlan.mainExercises[(currentSet - 1) % activeLessonPlan.mainExercises.length]
+      : null;
+
+  const nextExerciseItem =
+    activeLessonPlan && activeLessonPlan.mainExercises && activeLessonPlan.mainExercises.length > 0
+      ? activeLessonPlan.mainExercises[currentSet % activeLessonPlan.mainExercises.length]
+      : null;
+
+  // 세트 번호 변경 시 현재 세트의 본운동명 및 세트별 목표 횟수 실시간 동기화
+  useEffect(() => {
+    if (activeLessonPlan && currentExerciseItem) {
+      setExerciseName(currentExerciseItem.name);
+      if (currentExerciseItem.category) {
+        setCategory(currentExerciseItem.category);
+      }
+      if (currentExerciseItem.durationOrReps) {
+        const match = currentExerciseItem.durationOrReps.match(/(\d+)/);
+        if (match) {
+          setTargetReps(parseInt(match[1], 10));
+        }
+      }
+      setMemo(`${activeLessonPlan.title} [${currentSet}세트: ${currentExerciseItem.name}]`);
+    }
+  }, [currentSet, activeLessonPlan]);
 
   // Rep Counter Handlers
   const handleAddReps = (delta: number) => {
@@ -130,44 +248,48 @@ export const TimerTab: React.FC<TimerTabProps> = ({
   ) => {
     setIsRunning(false);
     setCurrentPhase('idle');
+    setActiveLessonPlan(null); // 일반 프리셋으로 전환
     setWorkTime(pWork);
     setRestTime(pRest);
     setTotalSets(pSets);
     setTimeLeft(prepTime);
     setCurrentSet(1);
+    setReps(0);
     setExerciseName(pName);
     setCategory(pCat);
     if (pTargetReps) {
       setTargetReps(pTargetReps);
     }
+    setMemo(`${pName} 인터벌 실습 완주`);
   };
 
-  // Active 5-lesson plans (passed via props, or student stored, or default)
-  const effectiveLessonPlans: LessonPlan[] =
-    lessonPlans.length > 0
-      ? lessonPlans
-      : student
-      ? getStudentLessonPlans(student.id)
-      : DEFAULT_LESSON_PLANS;
+  // Interval Engine: Ref-based state machine ensuring 1, 2, 3, 4 SET sequential progression
+  const timerStateRef = useRef({
+    currentPhase,
+    currentSet,
+    totalSets,
+    workTime,
+    restTime,
+    prepTime,
+    soundEnabled,
+    timeLeft
+  });
 
-  const getLessonPresetConfig = (lp: LessonPlan) => {
-    const factor = lp.focusArea || lp.title || '';
-    if (factor.includes('심폐')) {
-      return { work: 120, rest: 60, sets: 4, reps: 20, desc: '셔틀런 심폐 인터벌' };
-    }
-    if (factor.includes('근력')) {
-      return { work: 40, rest: 20, sets: 5, reps: 15, desc: '대근육 강화 저항 서킷' };
-    }
-    if (factor.includes('유연')) {
-      return { work: 30, rest: 10, sets: 5, reps: 5, desc: '정적 가동성 스트레칭 유지' };
-    }
-    if (factor.includes('순발')) {
-      return { work: 20, rest: 15, sets: 6, reps: 10, desc: '플라이오메트릭 파워 인터벌' };
-    }
-    return { work: 30, rest: 15, sets: 5, reps: 12, desc: 'PAPS 맞춤 복합 서킷' };
-  };
+  // Keep ref synchronized with state
+  useEffect(() => {
+    timerStateRef.current = {
+      currentPhase,
+      currentSet,
+      totalSets,
+      workTime,
+      restTime,
+      prepTime,
+      soundEnabled,
+      timeLeft
+    };
+  }, [currentPhase, currentSet, totalSets, workTime, restTime, prepTime, soundEnabled, timeLeft]);
 
-  // Interval Engine
+  // Interval Running Loop
   useEffect(() => {
     if (!isRunning) {
       if (timerRef.current) clearInterval(timerRef.current);
@@ -175,48 +297,62 @@ export const TimerTab: React.FC<TimerTabProps> = ({
     }
 
     timerRef.current = window.setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 4 && prev > 1 && soundEnabled) {
-          playCountdownTick();
-        }
+      const state = timerStateRef.current;
+      const currentRemaining = state.timeLeft;
 
-        if (prev <= 1) {
-          if (currentPhase === 'prep') {
-            if (soundEnabled) playWorkStartBeep();
-            setCurrentPhase('work');
-            return workTime;
-          } else if (currentPhase === 'work') {
-            if (currentSet >= totalSets) {
-              setIsRunning(false);
-              setCurrentPhase('finished');
-              if (soundEnabled) playCompletionFanfare();
-              confetti({
-                particleCount: 100,
-                spread: 70,
-                origin: { y: 0.6 }
-              });
-              setShowLogModal(true);
-              return 0;
-            } else {
-              if (soundEnabled) playRestStartBeep();
-              setCurrentPhase('rest');
-              return restTime;
-            }
-          } else if (currentPhase === 'rest') {
-            if (soundEnabled) playWorkStartBeep();
-            setCurrentSet((s) => s + 1);
-            setCurrentPhase('work');
-            return workTime;
+      if (currentRemaining <= 4 && currentRemaining > 1 && state.soundEnabled) {
+        playCountdownTick();
+      }
+
+      if (currentRemaining <= 1) {
+        if (state.currentPhase === 'prep') {
+          if (state.soundEnabled) playWorkStartBeep();
+          setCurrentPhase('work');
+          setTimeLeft(state.workTime);
+          timerStateRef.current.currentPhase = 'work';
+          timerStateRef.current.timeLeft = state.workTime;
+        } else if (state.currentPhase === 'work') {
+          if (state.currentSet >= state.totalSets) {
+            setIsRunning(false);
+            setCurrentPhase('finished');
+            setTimeLeft(0);
+            timerStateRef.current.currentPhase = 'finished';
+            timerStateRef.current.timeLeft = 0;
+            if (state.soundEnabled) playCompletionFanfare();
+            confetti({
+              particleCount: 100,
+              spread: 70,
+              origin: { y: 0.6 }
+            });
+            setShowLogModal(true);
+          } else {
+            if (state.soundEnabled) playRestStartBeep();
+            setCurrentPhase('rest');
+            setTimeLeft(state.restTime);
+            timerStateRef.current.currentPhase = 'rest';
+            timerStateRef.current.timeLeft = state.restTime;
           }
+        } else if (state.currentPhase === 'rest') {
+          if (state.soundEnabled) playWorkStartBeep();
+          const nextSetNumber = state.currentSet + 1; // Explicit sequential progression: 1 -> 2 -> 3 -> 4...
+          setCurrentSet(nextSetNumber);
+          setCurrentPhase('work');
+          setTimeLeft(state.workTime);
+          timerStateRef.current.currentSet = nextSetNumber;
+          timerStateRef.current.currentPhase = 'work';
+          timerStateRef.current.timeLeft = state.workTime;
         }
-        return prev - 1;
-      });
+      } else {
+        const nextTime = currentRemaining - 1;
+        setTimeLeft(nextTime);
+        timerStateRef.current.timeLeft = nextTime;
+      }
     }, 1000);
 
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [isRunning, currentPhase, currentSet, totalSets, workTime, restTime, soundEnabled]);
+  }, [isRunning]);
 
   // Stopwatch Engine
   useEffect(() => {
@@ -410,16 +546,52 @@ export const TimerTab: React.FC<TimerTabProps> = ({
 
       {/* 2. Main Timer Display Card */}
       {timerMode === 'interval' ? (
-        <div className="rounded-3xl bg-[#0d172e] border border-[#1e2f5b] p-8 shadow-xl flex flex-col items-center justify-center space-y-6 text-center">
-          {/* Active Exercise Target Tag */}
-          <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#070e1e] border border-[#1e2f5b] text-xs text-slate-300">
-            <Dumbbell className="w-3.5 h-3.5 text-[#E8FD3B]" />
-            <span>실습 종목:</span>
-            <span className="font-bold text-white">{exerciseName}</span>
-            <span className="text-[10px] text-sky-300 font-bold bg-[#142245] px-2 py-0.5 rounded-full border border-sky-500/20">
-              {category}
-            </span>
-          </div>
+        <div className="rounded-3xl bg-[#0d172e] border border-[#1e2f5b] p-6 sm:p-8 shadow-xl flex flex-col items-center justify-center space-y-5 text-center">
+          {/* Active Workout Plan Banner if configured */}
+          {activeLessonPlan ? (
+            <div className="w-full max-w-5xl bg-[#142245] border border-[#E8FD3B]/40 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-md">
+              <div className="flex items-center gap-3 text-left">
+                <div className="w-10 h-10 rounded-xl bg-[#E8FD3B] text-black font-black flex items-center justify-center text-sm shadow-xs shrink-0">
+                  {activeLessonPlan.lessonWeek}차
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-black text-white">{activeLessonPlan.title}</span>
+                    <span className="text-[10px] text-sky-300 font-bold bg-sky-950/80 px-2 py-0.5 rounded-full border border-sky-800">
+                      {activeLessonPlan.targetFactor || 'PAPS 맞춤처방'}
+                    </span>
+                  </div>
+                  <div className="text-xs text-slate-200 mt-0.5">
+                    현재 <span className="font-extrabold text-[#E8FD3B] font-mono">{currentSet}</span>세트 실습:{' '}
+                    <span className="font-extrabold text-white underline decoration-[#E8FD3B] underline-offset-4">
+                      {currentExerciseItem?.name || exerciseName}
+                    </span>
+                    {currentExerciseItem?.targetMuscle && (
+                      <span className="text-slate-400 text-[11px] ml-1.5">
+                        ({currentExerciseItem.targetMuscle})
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {nextExerciseItem && currentSet < totalSets && (
+                <div className="text-[11px] text-slate-300 bg-[#070e1e] px-3 py-1.5 rounded-xl border border-[#1e2f5b] flex items-center gap-1.5 self-stretch sm:self-auto justify-center">
+                  <span className="text-slate-500">다음 순서:</span>
+                  <span className="text-white font-bold">{nextExerciseItem.name}</span>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#070e1e] border border-[#1e2f5b] text-xs text-slate-300">
+              <Dumbbell className="w-3.5 h-3.5 text-[#E8FD3B]" />
+              <span>실습 종목:</span>
+              <span className="font-bold text-white">{exerciseName}</span>
+              <span className="text-[10px] text-sky-300 font-bold bg-[#142245] px-2 py-0.5 rounded-full border border-sky-500/20">
+                {category}
+              </span>
+            </div>
+          )}
 
           {/* Phase Pill */}
           <div
@@ -723,13 +895,71 @@ export const TimerTab: React.FC<TimerTabProps> = ({
             </div>
 
             {presetTab === 'lessons' ? (
-              <div className="space-y-2.5">
+              <div className="space-y-3">
+                {/* 1. Student's FITT Custom Prescription Plan Card */}
+                {effectiveFittPlan && (
+                  <div className="p-4 rounded-2xl bg-gradient-to-br from-[#142245] to-[#0d172e] border border-[#E8FD3B]/40 shadow-lg space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="px-2 py-0.5 rounded-lg bg-[#E8FD3B] text-black font-black text-[11px]">
+                          FITT 처방
+                        </span>
+                        <span className="font-extrabold text-white text-xs">
+                          {student?.name || '학생'}의 FITT 맞춤 처방 계획
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => applyFittPrescription(effectiveFittPlan)}
+                        className="px-3.5 py-1.5 rounded-xl bg-[#E8FD3B] hover:bg-[#d5eb28] text-black text-xs font-black transition shadow-xs cursor-pointer active:scale-95"
+                      >
+                        처방 자동 세팅
+                      </button>
+                    </div>
+
+                    <div className="text-xs text-slate-200">
+                      <span className="font-semibold text-slate-400">목표: </span>
+                      {effectiveFittPlan.goalStatement || 'PAPS 맞춤 체력 향상'}
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-1 text-[11px]">
+                      <div className="bg-[#070e1e] p-2 rounded-xl border border-[#1e2f5b]">
+                        <span className="text-slate-500 block text-[10px]">빈도 (F)</span>
+                        <span className="text-white font-bold">{effectiveFittPlan.frequency}</span>
+                      </div>
+                      <div className="bg-[#070e1e] p-2 rounded-xl border border-[#1e2f5b]">
+                        <span className="text-slate-500 block text-[10px]">강도 (I)</span>
+                        <span className="text-[#E8FD3B] font-bold">{effectiveFittPlan.intensity}</span>
+                      </div>
+                      <div className="bg-[#070e1e] p-2 rounded-xl border border-[#1e2f5b]">
+                        <span className="text-slate-500 block text-[10px]">시간 (T)</span>
+                        <span className="text-sky-300 font-bold">{effectiveFittPlan.time}</span>
+                      </div>
+                      <div className="bg-[#070e1e] p-2 rounded-xl border border-[#1e2f5b]">
+                        <span className="text-slate-500 block text-[10px]">형태 (T)</span>
+                        <span className="text-emerald-300 font-bold truncate block">{effectiveFittPlan.type}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 2. 5-Lesson Plans with 8 Main Exercises */}
                 {effectiveLessonPlans.map((lp) => {
-                  const cfg = getLessonPresetConfig(lp);
+                  const isCurrentActive = activeLessonPlan?.lessonWeek === lp.lessonWeek;
+                  const wTime = lp.workTimeSeconds || 40;
+                  const rTime = lp.restTimeSeconds || 20;
+                  const setCnt = lp.mainExercises?.length || lp.setsCount || 8;
+                  const firstRepMatch = lp.mainExercises?.[0]?.durationOrReps?.match(/(\d+)/);
+                  const parsedRep = firstRepMatch ? parseInt(firstRepMatch[1], 10) : 15;
+
                   return (
                     <div
                       key={lp.lessonWeek}
-                      className="p-3.5 rounded-2xl bg-[#070e1e] hover:bg-[#142245]/50 border border-[#1e2f5b] hover:border-[#E8FD3B]/40 transition space-y-1.5"
+                      className={`p-4 rounded-2xl transition space-y-2.5 border ${
+                        isCurrentActive
+                          ? 'bg-[#142245] border-[#E8FD3B] shadow-[0_0_15px_rgba(232,253,59,0.15)]'
+                          : 'bg-[#070e1e] hover:bg-[#142245]/50 border-[#1e2f5b] hover:border-[#E8FD3B]/30'
+                      }`}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
@@ -739,35 +969,60 @@ export const TimerTab: React.FC<TimerTabProps> = ({
                           <span className="font-bold text-white text-xs">
                             {lp.title}
                           </span>
+                          {isCurrentActive && (
+                            <span className="text-[10px] bg-[#E8FD3B]/20 text-[#E8FD3B] font-extrabold px-2 py-0.5 rounded-md border border-[#E8FD3B]/40">
+                              선택됨
+                            </span>
+                          )}
                         </div>
                         <button
                           type="button"
-                          onClick={() =>
-                            applyPreset(
-                              cfg.work,
-                              cfg.rest,
-                              cfg.sets,
-                              `${lp.lessonWeek}차시: ${lp.title}`,
-                              lp.focusArea || '종합체력',
-                              cfg.reps
-                            )
-                          }
-                          className="px-3 py-1 rounded-xl bg-[#E8FD3B] hover:bg-[#d5eb28] text-black text-xs font-extrabold transition shadow-xs cursor-pointer"
+                          onClick={() => applyFullLessonPlan(lp)}
+                          className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition shadow-xs cursor-pointer active:scale-95 ${
+                            isCurrentActive
+                              ? 'bg-white text-black hover:bg-slate-200'
+                              : 'bg-[#E8FD3B] hover:bg-[#d5eb28] text-black'
+                          }`}
                         >
-                          프리셋 적용
+                          실습 자동 세팅
                         </button>
                       </div>
 
-                      <div className="text-[11px] text-slate-300 line-clamp-1">
-                        <span className="font-semibold text-slate-400">본운동:</span> {lp.mainRoutine}
-                      </div>
+                      {/* 8 Main Exercises Sequence Preview */}
+                      {lp.mainExercises && lp.mainExercises.length > 0 && (
+                        <div className="space-y-1">
+                          <span className="text-[10px] font-bold text-slate-400 block">
+                            실습 순환 8개 본운동 계획:
+                          </span>
+                          <div className="flex flex-wrap gap-1">
+                            {lp.mainExercises.map((ex, idx) => (
+                              <span
+                                key={idx}
+                                className={`text-[10px] px-2 py-0.5 rounded-lg border flex items-center gap-1 ${
+                                  isCurrentActive && currentSet === idx + 1
+                                    ? 'bg-[#E8FD3B] text-black font-black border-[#E8FD3B]'
+                                    : 'bg-[#0d172e] text-slate-300 border-[#1e2f5b]'
+                                }`}
+                              >
+                                <span className="opacity-60">{idx + 1}.</span>
+                                <span className="font-bold">{ex.name}</span>
+                                {ex.durationOrReps && (
+                                  <span className="text-[9px] opacity-80">({ex.durationOrReps})</span>
+                                )}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
 
-                      <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1 border-t border-[#1e2f5b]">
-                        <span className="inline-flex items-center gap-1 font-medium text-sky-300">
-                          🎯 {lp.focusArea || '종합체력'}
+                      <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-[#1e2f5b]">
+                        <span className="inline-flex items-center gap-1 font-bold text-sky-300">
+                          🎯 {lp.targetFactor || lp.focusArea || '종합체력'}
                         </span>
                         <span>
-                          운동 {cfg.work}초 / 휴식 {cfg.rest}초 · {cfg.sets}세트 (목표 {cfg.reps}회)
+                          운동 <strong className="text-white font-mono">{wTime}초</strong> / 휴식{' '}
+                          <strong className="text-white font-mono">{rTime}초</strong> ·{' '}
+                          <strong className="text-[#E8FD3B] font-mono">{setCnt}세트</strong> (권장 {parsedRep}회)
                         </span>
                       </div>
                     </div>

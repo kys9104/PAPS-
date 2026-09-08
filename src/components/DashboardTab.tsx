@@ -461,7 +461,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
             onClick={() => onNavigateTab('exercises')}
             className="w-full py-3 mt-3 bg-[#142245] hover:bg-[#1a2b56] text-white border border-[#1e2f5b] hover:border-[#E8FD3B]/40 rounded-2xl text-xs font-bold transition cursor-pointer"
           >
-            전체 40종 가이드 보기
+            전체 체력 운동 가이드 보기
           </button>
         </section>
 

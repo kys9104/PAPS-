@@ -343,6 +343,28 @@ export const AllStudentsTab: React.FC<AllStudentsTabProps> = ({
             </div>
           </div>
         </div>
+
+        {/* BMI Privacy Notice Bar */}
+        <div className="mt-4 pt-4 border-t border-[#1e2f5b]/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs bg-[#070e1e]/60 rounded-2xl p-3 border border-sky-900/40">
+          <div className="flex items-center gap-2.5">
+            <div className="w-6 h-6 rounded-lg bg-sky-500/20 text-sky-400 flex items-center justify-center shrink-0 border border-sky-500/30">
+              <Lock className="w-3.5 h-3.5" />
+            </div>
+            <div>
+              <span className="font-bold text-white">신체조성(BMI·키·체중) 개인정보 보호: </span>
+              <span className="text-slate-300">
+                {isTeacher
+                  ? '체육교사 인증 완료 — 전교생의 신체조성 기록을 통합 관리 및 열람할 수 있습니다.'
+                  : '학생 모드 적용 — 개인정보 보호를 위해 본인 기록만 표시되며, 타 학생의 신체조성은 비공개 처리됩니다.'}
+              </span>
+            </div>
+          </div>
+          {!isTeacher && (
+            <span className="text-[11px] text-sky-400 font-bold bg-sky-950/80 px-2.5 py-1 rounded-lg border border-sky-800/60 shrink-0 self-start sm:self-auto">
+              전체 신체조성은 체육교사 전용
+            </span>
+          )}
+        </div>
       </div>
 
       {/* KPI Stats Summary Cards */}
@@ -603,7 +625,17 @@ export const AllStudentsTab: React.FC<AllStudentsTabProps> = ({
                   <th className="py-3.5 px-3">유연성</th>
                   <th className="py-3.5 px-3">근력·근지구력</th>
                   <th className="py-3.5 px-3">순발력</th>
-                  <th className="py-3.5 px-3">신체조성(BMI)</th>
+                  <th className="py-3.5 px-3">
+                    <div className="flex items-center gap-1">
+                      <span>신체조성(BMI)</span>
+                      {!isTeacher && (
+                        <span className="text-[10px] font-normal text-amber-300 bg-amber-500/20 px-1 py-0.5 rounded flex items-center gap-0.5" title="신체조성 정보는 본인 기록만 표시됩니다">
+                          <Lock className="w-2.5 h-2.5" />
+                          <span>개인별</span>
+                        </span>
+                      )}
+                    </div>
+                  </th>
                   <th className="py-3.5 px-3 text-center">5차시 실천</th>
                   <th className="py-3.5 px-3 text-center">세특</th>
                   <th className="py-3.5 px-4 text-center">관리·조회</th>
@@ -748,17 +780,32 @@ export const AllStudentsTab: React.FC<AllStudentsTabProps> = ({
                           )}
                         </td>
 
-                        {/* Body Composition (BMI) */}
+                        {/* Body Composition (BMI) - Protected: Individual student or teacher only */}
                         <td className="py-3 px-3 whitespace-nowrap">
                           {paps && paps.bodyComp ? (
-                            <div className="text-xs">
-                              <span className="font-mono font-bold text-white">
-                                {paps.bodyComp.bmi}
-                              </span>
-                              <span className="text-[10px] text-slate-400 ml-1">
-                                ({paps.bodyComp.status || `${paps.bodyComp.grade}등급`})
-                              </span>
-                            </div>
+                            isTeacher || isSelf ? (
+                              <div className="text-xs flex items-center gap-1">
+                                <span className="font-mono font-bold text-white">
+                                  {paps.bodyComp.bmi}
+                                </span>
+                                <span className="text-[10px] text-slate-400">
+                                  ({paps.bodyComp.status || `${paps.bodyComp.grade}등급`})
+                                </span>
+                                {isSelf && !isTeacher && (
+                                  <span className="ml-1 px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 text-[9px] font-bold border border-sky-500/30">
+                                    본인
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <div
+                                className="inline-flex items-center gap-1 text-[11px] text-slate-500 bg-[#070e1e] px-2 py-0.5 rounded border border-[#1e2f5b]/80 cursor-help"
+                                title="신체조성(BMI·키·체중)은 개인정보 보호를 위해 본인 및 체육교사만 조회할 수 있습니다."
+                              >
+                                <Lock className="w-2.5 h-2.5 text-slate-400" />
+                                <span>비공개</span>
+                              </div>
+                            )
                           ) : (
                             <span className="text-slate-500">-</span>
                           )}
@@ -921,6 +968,30 @@ export const AllStudentsTab: React.FC<AllStudentsTabProps> = ({
                       <strong className="text-white font-mono">{paps.agility.value} {paps.agility.unit}</strong>
                       <span className="text-slate-400 text-[10px] ml-1">({paps.agility.grade}등급)</span>
                     </div>
+                    {/* Protected BMI slot in Card */}
+                    <div className="col-span-2 text-xs pt-2 border-t border-[#1e2f5b]/80 flex items-center justify-between">
+                      <span className="text-slate-400 text-[10px] flex items-center gap-1">
+                        <Lock className="w-2.5 h-2.5 text-slate-500" />
+                        <span>신체조성(BMI)</span>
+                      </span>
+                      {isTeacher || isSelf ? (
+                        <div className="font-mono text-xs">
+                          <strong className="text-white">{paps.bodyComp.bmi}</strong>
+                          <span className="text-[10px] text-slate-400 ml-1">
+                            ({paps.bodyComp.status || `${paps.bodyComp.grade}등급`})
+                          </span>
+                          {isSelf && !isTeacher && (
+                            <span className="ml-1 px-1.5 py-0.2 rounded bg-sky-500/20 text-sky-300 text-[9px] font-bold border border-sky-500/30">
+                              본인
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-[10px] text-slate-500 bg-[#070e1e] px-2 py-0.5 rounded border border-[#1e2f5b]/60">
+                          비공개 (교사 전용)
+                        </span>
+                      )}
+                    </div>
                   </div>
                 ) : (
                   <div className="bg-[#070e1e] p-4 rounded-2xl border border-[#1e2f5b] text-center text-xs text-slate-400">
@@ -983,6 +1054,7 @@ export const AllStudentsTab: React.FC<AllStudentsTabProps> = ({
       {viewingStudent && (
         <ViewDetailModal
           student={viewingStudent}
+          currentStudent={currentStudent}
           record={studentPapsMap.get(viewingStudent.id) || null}
           isTeacher={isTeacher}
           onClose={() => setViewingStudent(null)}
@@ -1048,30 +1120,27 @@ const EditPapsModal: React.FC<EditPapsModalProps> = ({
 
   // 실시간 점수 및 등급 자동 산출
   const evaluated = useMemo(() => {
+    const safeGender: '남' | '여' = gender === '여' ? '여' : '남';
+    const standards = PAPS_STANDARDS[safeGender] || PAPS_STANDARDS['남'];
+
     // 1) 심폐
-    const cardioThreshold = (PAPS_STANDARDS[gender] as any)[cardioTest];
-    const cardioRes = cardioThreshold
-      ? evaluateGrade(cardioValue, cardioThreshold)
-      : { grade: 3, score: 12 };
+    const cardioThreshold = (standards as any)[cardioTest] || standards.왕복오래달리기;
+    const cardioRes = evaluateGrade(cardioValue, cardioThreshold);
 
     // 2) 유연성
-    const flexThreshold = PAPS_STANDARDS[gender].앉아윗몸앞으로굽히기;
+    const flexThreshold = standards.앉아윗몸앞으로굽히기;
     const flexRes = evaluateGrade(flexibilityValue, flexThreshold);
 
     // 3) 근력
-    const strengthThreshold = (PAPS_STANDARDS[gender] as any)[strengthTest];
-    const strengthRes = strengthThreshold
-      ? evaluateGrade(strengthValue, strengthThreshold)
-      : { grade: 3, score: 12 };
+    const strengthThreshold = (standards as any)[strengthTest] || standards.악력;
+    const strengthRes = evaluateGrade(strengthValue, strengthThreshold);
 
     // 4) 순발력
-    const agilityThreshold = (PAPS_STANDARDS[gender] as any)[agilityTest];
-    const agilityRes = agilityThreshold
-      ? evaluateGrade(agilityValue, agilityThreshold)
-      : { grade: 3, score: 12 };
+    const agilityThreshold = (standards as any)[agilityTest] || standards.제자리멀리뛰기;
+    const agilityRes = evaluateGrade(agilityValue, agilityThreshold);
 
     // 5) 신체조성
-    const bmiRes = evaluateBMI(height, weight);
+    const bmiRes = evaluateBMI(height, weight, safeGender);
 
     // 총점 및 종합등급
     const totalScore =
@@ -1362,6 +1431,7 @@ const EditPapsModal: React.FC<EditPapsModalProps> = ({
 // ==========================================
 interface ViewDetailModalProps {
   student: StudentProfile;
+  currentStudent: StudentProfile | null;
   record: PAPSRecord | null;
   isTeacher: boolean;
   onClose: () => void;
@@ -1372,6 +1442,7 @@ interface ViewDetailModalProps {
 
 const ViewDetailModal: React.FC<ViewDetailModalProps> = ({
   student,
+  currentStudent,
   record,
   isTeacher,
   onClose,
@@ -1379,6 +1450,9 @@ const ViewDetailModal: React.FC<ViewDetailModalProps> = ({
   onOpenTeacherLogin,
   onNavigateNeis
 }) => {
+  const canViewBmi = isTeacher || currentStudent?.id === student.id;
+  const isSelf = currentStudent?.id === student.id;
+
   return (
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
       <div className="bg-[#0d172e] border border-[#1e2f5b] w-full max-w-xl rounded-3xl p-6 shadow-2xl space-y-5 my-8 animate-in zoom-in-95">
@@ -1390,6 +1464,11 @@ const ViewDetailModal: React.FC<ViewDetailModalProps> = ({
               <span className="text-xs px-2 py-0.5 rounded-md bg-[#142245] text-sky-300 font-bold border border-[#1e2f5b]">
                 1학년 {student.classNum}반 {student.studentNum}번 ({student.gender})
               </span>
+              {isSelf && !isTeacher && (
+                <span className="text-xs px-2 py-0.5 rounded-md bg-[#E8FD3B] text-black font-black">
+                  나의 기록
+                </span>
+              )}
             </div>
             <span className="text-xs text-slate-400 mt-0.5 block">
               신안해양과학고등학교 공식 PAPS 기록 일람
@@ -1425,14 +1504,30 @@ const ViewDetailModal: React.FC<ViewDetailModalProps> = ({
 
             {/* 5 Factors */}
             <div className="space-y-2">
-              <h4 className="text-xs font-bold text-slate-400">5대 체력 요인별 측정 결과</h4>
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold text-slate-400">5대 체력 요인별 측정 결과</h4>
+                {!canViewBmi && (
+                  <span className="text-[10px] text-slate-400 flex items-center gap-1 bg-[#070e1e] px-2 py-0.5 rounded border border-[#1e2f5b]">
+                    <Lock className="w-2.5 h-2.5 text-amber-400" />
+                    <span>신체조성: 개인정보 보호 적용 중</span>
+                  </span>
+                )}
+              </div>
               <div className="space-y-1.5">
                 {[
-                  { label: '심폐지구력', val: `${record.cardio.value} ${record.cardio.unit}`, grade: record.cardio.grade, score: record.cardio.score },
-                  { label: '유연성', val: `${record.flexibility.value} cm`, grade: record.flexibility.grade, score: record.flexibility.score },
-                  { label: '근력·근지구력', val: `${record.strength.value} ${record.strength.unit}`, grade: record.strength.grade, score: record.strength.score },
-                  { label: '순발력', val: `${record.agility.value} ${record.agility.unit}`, grade: record.agility.grade, score: record.agility.score },
-                  { label: '신체조성(BMI)', val: `${record.bodyComp.bmi} (${record.bodyComp.status || '정상'})`, grade: record.bodyComp.grade, score: record.bodyComp.score }
+                  { label: '심폐지구력', val: `${record.cardio.value} ${record.cardio.unit}`, grade: record.cardio.grade, score: record.cardio.score, locked: false },
+                  { label: '유연성', val: `${record.flexibility.value} cm`, grade: record.flexibility.grade, score: record.flexibility.score, locked: false },
+                  { label: '근력·근지구력', val: `${record.strength.value} ${record.strength.unit}`, grade: record.strength.grade, score: record.strength.score, locked: false },
+                  { label: '순발력', val: `${record.agility.value} ${record.agility.unit}`, grade: record.agility.grade, score: record.agility.score, locked: false },
+                  {
+                    label: '신체조성(BMI)',
+                    val: canViewBmi
+                      ? `${record.bodyComp.bmi} (${record.bodyComp.status || '정상'}) ${record.bodyComp.height ? `[${record.bodyComp.height}cm / ${record.bodyComp.weight}kg]` : ''}`
+                      : '🔒 비공개 (본인 및 체육교사만 열람 가능)',
+                    grade: canViewBmi ? record.bodyComp.grade : '-',
+                    score: canViewBmi ? record.bodyComp.score : '-',
+                    locked: !canViewBmi
+                  }
                 ].map((item, idx) => (
                   <div
                     key={idx}
@@ -1440,14 +1535,18 @@ const ViewDetailModal: React.FC<ViewDetailModalProps> = ({
                   >
                     <span className="font-bold text-slate-300">{item.label}</span>
                     <div className="flex items-center gap-3">
-                      <span className="font-mono font-black text-white">{item.val}</span>
-                      <span
-                        className={`px-2 py-0.5 rounded-md font-bold text-[11px] border ${getGradeColor(
-                          item.grade
-                        ).badge}`}
-                      >
-                        {item.grade}등급 ({item.score}점)
+                      <span className={`font-mono font-black ${item.locked ? 'text-slate-400 text-xs font-sans font-medium' : 'text-white'}`}>
+                        {item.val}
                       </span>
+                      {!item.locked && typeof item.grade === 'number' && (
+                        <span
+                          className={`px-2 py-0.5 rounded-md font-bold text-[11px] border ${getGradeColor(
+                            item.grade
+                          ).badge}`}
+                        >
+                          {item.grade}등급 ({item.score}점)
+                        </span>
+                      )}
                     </div>
                   </div>
                 ))}

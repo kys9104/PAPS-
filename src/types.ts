@@ -57,6 +57,7 @@ export interface FITTPlan {
   intensity: string; // I: 운동 강도
   time: string;      // T: 운동 시간
   type: string;      // T: 운동 형태
+  setsCount?: number; // 세트 수 (수동 설정 1~10)
   selfAnalysis: string; // 현재 체력 분석 및 보완점
   goalStatement: string; // 나의 체력 증진 목표
   principlesChecklist: {
@@ -91,7 +92,9 @@ export interface LessonPlan {
   mainExercises?: MainExerciseSlot[]; // 본운동 8개 고정 슬롯
   workTimeSeconds?: number; // 인터벌 운동 시간(초)
   restTimeSeconds?: number; // 인터벌 휴식 시간(초)
-  setsCount?: number; // 세트 수
+  setsCount?: number; // 세트 수 (1~10)
+  intensity?: string; // 차시별 운동 강도
+  specialNotes?: string; // 특이사항 및 지도 메모
   coolDown: string;
   reflection: string;
   isCompleted: boolean;

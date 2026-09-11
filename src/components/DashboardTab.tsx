@@ -238,7 +238,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
               onClick={() => onNavigateTab('fitt')}
               className="text-xs text-[#E8FD3B] hover:underline font-bold cursor-pointer"
             >
-              처방 수정
+              계획 조회 및 수정
             </button>
           </div>
 
@@ -300,6 +300,24 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
               </div>
               <p className="text-xs text-slate-300 font-medium pl-9 leading-relaxed">
                 {fittPlan?.type || '유산소(왕복오래달리기) + 하체 및 코어 저항 운동'}
+              </p>
+            </div>
+
+            {/* Sets (세트 수) */}
+            <div className="p-3.5 border border-[#1e2f5b] bg-[#070e1e] rounded-2xl">
+              <div className="flex items-center gap-2.5 mb-1">
+                <span className="w-7 h-7 bg-emerald-400 text-black rounded-lg flex items-center justify-center font-black text-xs">
+                  S
+                </span>
+                <span className="font-bold text-white text-xs sm:text-sm">
+                  세트 수 (Sets)
+                </span>
+                <span className="text-[10px] font-bold text-black bg-[#E8FD3B] px-1.5 py-0.5 rounded ml-auto">
+                  수동 설정 반영
+                </span>
+              </div>
+              <p className="text-xs text-[#E8FD3B] font-bold pl-9 leading-relaxed">
+                {fittPlan?.setsCount || 3}세트 (수동 조절 가능)
               </p>
             </div>
           </div>
@@ -693,9 +711,9 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
 
           {workoutLogs.length > 0 ? (
             <div className="space-y-2.5">
-              {workoutLogs.slice(0, 5).map((log) => (
+              {workoutLogs.slice(0, 5).map((log, index) => (
                 <div
-                  key={log.id}
+                  key={`${log.id}-${index}`}
                   className="p-3.5 bg-[#070e1e] rounded-2xl border border-[#1e2f5b] flex items-center justify-between gap-3 text-xs"
                 >
                   <div className="flex items-center gap-3">

@@ -75,6 +75,7 @@ export default function App() {
 
   // FITT to Interval Timer link state
   const [appliedLessonPlan, setAppliedLessonPlan] = useState<LessonPlan | null>(null);
+  const [fittViewMode, setFittViewMode] = useState<'view' | 'edit'>('view');
 
   // Timer cross-navigation params
   const [timerExercise, setTimerExercise] = useState<{ name: string; category: string }>({
@@ -374,6 +375,8 @@ export default function App() {
               setAppliedLessonPlan(lesson);
               setCurrentTab('timer');
             }}
+            onOpenGasSettings={() => setIsGasSettingsOpen(true)}
+            initialViewMode={fittPlan ? fittViewMode : 'edit'}
           />
         )}
 
@@ -415,7 +418,9 @@ export default function App() {
             appliedLessonPlan={appliedLessonPlan}
             initialExerciseName={timerExercise.name}
             initialCategory={timerExercise.category}
-            onWorkoutLogged={(log) => setWorkoutLogs((prev) => [log, ...prev])}
+            onWorkoutLogged={(log) =>
+              setWorkoutLogs((prev) => [log, ...prev.filter((l) => l.id !== log.id)])
+            }
             onOpenAuth={() => setIsAuthOpen(true)}
             isTeacher={isTeacher}
             onDeleteWorkoutLog={handleDeleteWorkoutLog}

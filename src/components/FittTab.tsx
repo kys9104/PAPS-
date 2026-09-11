@@ -12,19 +12,24 @@ import {
   Timer,
   FileSpreadsheet,
   Plus,
+  Minus,
   Trash2,
   ArrowRight,
-  Sparkles
+  Sparkles,
+  Eye,
+  Edit3
 } from 'lucide-react';
 import { StudentProfile, FITTPlan, LessonPlan, MainExerciseSlot } from '../types';
 import {
   saveStudentFittPlan,
   saveStudentLessonPlans,
+  saveSingleLessonPlan,
   syncToGoogleSheet,
   createDefaultMainExercises,
   exportToGoogleSheetGas
 } from '../services/storageService';
 import { EXERCISE_GUIDES } from '../data/exerciseGuides';
+import { StudentPlanView } from './StudentPlanView';
 
 interface FittTabProps {
   student: StudentProfile | null;
@@ -35,6 +40,7 @@ interface FittTabProps {
   onOpenAuth: () => void;
   onApplyToIntervalTimer?: (lesson: LessonPlan) => void;
   onOpenGasSettings?: () => void;
+  initialViewMode?: 'view' | 'edit';
 }
 
 export const FittTab: React.FC<FittTabProps> = ({
@@ -45,8 +51,18 @@ export const FittTab: React.FC<FittTabProps> = ({
   onUpdateLessonPlans,
   onOpenAuth,
   onApplyToIntervalTimer,
-  onOpenGasSettings
+  onOpenGasSettings,
+  initialViewMode = 'edit'
 }) => {
+  // Mode State: 'view' (학생용 계획 조회 화면) vs 'edit' (차시 및 FITT 편집 폼)
+  const [viewMode, setViewMode] = useState<'view' | 'edit'>(initialViewMode);
+
+  useEffect(() => {
+    if (initialViewMode) {
+      setViewMode(initialViewMode);
+    }
+  }, [initialViewMode]);
+
   // FITT Form State
   const [frequency, setFrequency] = useState<string>(
     fittPlan?.frequency || '주 3~4회 (월, 수, 금, 토)'
@@ -60,6 +76,9 @@ export const FittTab: React.FC<FittTabProps> = ({
   const [type, setType] = useState<string>(
     fittPlan?.type || '유산소(셔틀런·인터벌) + 하체/코어 저항성 맨몸운동'
   );
+  // [1. 세트 수 수동 설정 기능] 최소 1세트, 최대 10세트
+  const [setsCount, setSetsCount] = useState<number>(fittPlan?.setsCount || 3);
+
   const [selfAnalysis, setSelfAnalysis] = useState<string>(
     fittPlan?.selfAnalysis ||
       '현재 심폐지구력과 유연성에 비해 하체 근지구력이 부족하여 오래달리기 후반부 속도가 저하됨.'
@@ -100,7 +119,9 @@ export const FittTab: React.FC<FittTabProps> = ({
         mainExercises: slots,
         workTimeSeconds: p.workTimeSeconds || 40,
         restTimeSeconds: p.restTimeSeconds || 20,
-        setsCount: p.setsCount || 3
+        setsCount: p.setsCount || 3,
+        intensity: p.intensity || 'RPE 7 (약간 힘들다)',
+        specialNotes: p.specialNotes || ''
       };
     });
   };
@@ -112,12 +133,19 @@ export const FittTab: React.FC<FittTabProps> = ({
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
+  // 차시별 개별 저장 상태
+  const [savingLessonWeek, setSavingLessonWeek] = useState<number | null>(null);
+  const [savedLessonWeek, setSavedLessonWeek] = useState<number | null>(null);
+
   useEffect(() => {
     if (fittPlan) {
       setFrequency(fittPlan.frequency);
       setIntensity(fittPlan.intensity);
       setTime(fittPlan.time);
       setType(fittPlan.type);
+      if (fittPlan.setsCount !== undefined) {
+        setSetsCount(fittPlan.setsCount);
+      }
       setSelfAnalysis(fittPlan.selfAnalysis);
       setGoalStatement(fittPlan.goalStatement);
       if (fittPlan.principlesChecklist) {
@@ -129,6 +157,63 @@ export const FittTab: React.FC<FittTabProps> = ({
   useEffect(() => {
     setLessons(normalizeLessonPlansWithEight(lessonPlans));
   }, [lessonPlans]);
+
+  // [세트 수 수동 설정 핸들러: 유효성 검사 1~10세트]
+  const handleSetsCountChange = (val: number | string) => {
+    let num = typeof val === 'string' ? parseInt(val, 10) : val;
+    if (isNaN(num)) num = 1;
+    const clamped = Math.max(1, Math.min(10, num));
+    setSetsCount(clamped);
+  };
+
+  // 5차시 전체에 설정한 세트 수 일괄 적용
+  const handleApplySetsToAllLessons = () => {
+    const updated = lessons.map((l) => ({ ...l, setsCount }));
+    setLessons(updated);
+    setStatusMessage({
+      text: `모든 5개 차시의 세트 수가 ${setsCount}세트로 일괄 설정되었습니다.`,
+      type: 'success'
+    });
+    setTimeout(() => setStatusMessage(null), 3500);
+  };
+
+  // 개별 차시 세트 수 변경 핸들러 (유효성 검사 1~10세트)
+  const handleLessonSetsCountChange = (lessonIdx: number, val: number | string) => {
+    let num = typeof val === 'string' ? parseInt(val, 10) : val;
+    if (isNaN(num)) num = 1;
+    const clamped = Math.max(1, Math.min(10, num));
+    const updated = [...lessons];
+    updated[lessonIdx] = {
+      ...updated[lessonIdx],
+      setsCount: clamped
+    };
+    setLessons(updated);
+  };
+
+  // [2. 차시별 개별 저장 핸들러]
+  const handleSaveSingleLesson = async (idx: number) => {
+    if (!student) return;
+    const target = lessons[idx];
+    setSavingLessonWeek(target.lessonWeek);
+    try {
+      const updated = await saveSingleLessonPlan(student.id, target.lessonWeek, target);
+      onUpdateLessonPlans(updated);
+      setSavedLessonWeek(target.lessonWeek);
+      setStatusMessage({
+        text: `${target.lessonWeek}차시 계획이 개별 저장되었습니다!`,
+        type: 'success'
+      });
+      setTimeout(() => setSavedLessonWeek(null), 3000);
+    } catch {
+      setStatusMessage({
+        text: `${target.lessonWeek}차시 개별 저장 중 오류가 발생했습니다.`,
+        type: 'error'
+      });
+    } finally {
+      setSavingLessonWeek(null);
+      setTimeout(() => setStatusMessage(null), 3500);
+    }
+  };
 
   // 본운동 8개 슬롯 개별 수정 핸들러
   const handleMainExerciseSlotChange = (
@@ -253,6 +338,7 @@ export const FittTab: React.FC<FittTabProps> = ({
       intensity,
       time,
       type,
+      setsCount,
       selfAnalysis,
       goalStatement,
       principlesChecklist: principles
@@ -271,6 +357,7 @@ export const FittTab: React.FC<FittTabProps> = ({
           intensity,
           time,
           type,
+          setsCount,
           goalStatement,
           principlesSummary: Object.entries(principles)
             .filter(([, v]) => v)
@@ -431,6 +518,64 @@ export const FittTab: React.FC<FittTabProps> = ({
         )}
       </div>
 
+      {/* Mode Switcher Tabs (내 처방 계획 조회 vs 처방 및 5차시 계획 편집) */}
+      <div className="flex flex-wrap items-center justify-between gap-3 p-2 bg-[#0d172e] border border-[#1e2f5b] rounded-2xl shadow-md">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setViewMode('view')}
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition cursor-pointer ${
+              viewMode === 'view'
+                ? 'bg-[#E8FD3B] text-black font-black shadow-[0_0_15px_rgba(232,253,59,0.3)]'
+                : 'bg-[#070e1e] text-slate-300 hover:text-white border border-[#1e2f5b]'
+            }`}
+          >
+            <Eye className="w-4 h-4" />
+            <span>📋 내 운동 처방 계획 조회 (타임라인/리스트)</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('edit')}
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition cursor-pointer ${
+              viewMode === 'edit'
+                ? 'bg-[#E8FD3B] text-black font-black shadow-[0_0_15px_rgba(232,253,59,0.3)]'
+                : 'bg-[#070e1e] text-slate-300 hover:text-white border border-[#1e2f5b]'
+            }`}
+          >
+            <Edit3 className="w-4 h-4" />
+            <span>✏️ FITT 처방 및 5차시 계획 편집/수정</span>
+          </button>
+        </div>
+
+        <span className="text-xs text-slate-400 hidden sm:inline-block pr-2">
+          {viewMode === 'view'
+            ? '🔍 학생 본인의 저장된 FITT 처방과 5차시 실천 타임라인을 조회합니다.'
+            : '📝 세트 수 수동 설정(1~10세트) 및 차시별 개별 저장이 가능합니다.'}
+        </span>
+      </div>
+
+      {viewMode === 'view' ? (
+        <StudentPlanView
+          student={student}
+          fittPlan={{
+            studentId: student.id,
+            updatedAt: fittPlan?.updatedAt || new Date().toISOString(),
+            frequency,
+            intensity,
+            time,
+            type,
+            setsCount,
+            selfAnalysis,
+            goalStatement,
+            principlesChecklist: principles
+          }}
+          lessonPlans={lessons}
+          onNavigateToTimer={(lesson) => applyToIntervalTimer(lesson)}
+          onSwitchToEditMode={() => setViewMode('edit')}
+          onToggleComplete={(idx) => handleToggleLesson(idx)}
+        />
+      ) : (
+        <>
       {/* 2. Educational Theory: 5 Principles of Physical Fitness Checklist */}
       <div className="rounded-3xl bg-[#0d172e] border border-[#1e2f5b] p-6 space-y-4 shadow-xl">
         <div className="flex items-center justify-between">
@@ -602,6 +747,89 @@ export const FittTab: React.FC<FittTabProps> = ({
               className="w-full bg-[#0d172e] border border-[#1e2f5b] focus:border-purple-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
             />
           </div>
+
+          {/* S: Sets (세트 수 수동 설정 기능) */}
+          <div className="p-4 bg-gradient-to-br from-[#0c1836] to-[#070e1e] rounded-2xl border border-[#E8FD3B]/40 space-y-3 shadow-md md:col-span-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#1e2f5b] pb-2">
+              <div>
+                <label className="text-xs font-black text-[#E8FD3B] flex items-center gap-1.5">
+                  <Target className="w-4 h-4" />
+                  S (Sets - 운동 처방 세트 수 수동 설정)
+                </label>
+                <p className="text-[11px] text-slate-300 mt-0.5">
+                  자동 계산값을 덮어쓰고 학생이 직접 세트 수를 설정합니다. (입력 유효성 검사: 최소 1세트 ~ 최대 10세트)
+                </p>
+              </div>
+              <span className="text-[10px] font-bold text-black bg-[#E8FD3B] px-2.5 py-0.5 rounded-full self-start sm:self-auto shadow-xs">
+                수동 설정 반영됨
+              </span>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-4 pt-1">
+              {/* Stepper with - / Numeric Input / + */}
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-bold text-slate-300">처방 세트 수:</span>
+                <div className="flex items-center bg-[#0d172e] border border-[#1e2f5b] rounded-xl p-1 shadow-inner">
+                  <button
+                    type="button"
+                    onClick={() => handleSetsCountChange(setsCount - 1)}
+                    disabled={setsCount <= 1}
+                    className="w-8 h-8 rounded-lg bg-[#142245] hover:bg-[#1f3468] text-white flex items-center justify-center font-bold text-sm disabled:opacity-30 cursor-pointer transition"
+                    title="1세트 감소 (최소 1세트)"
+                  >
+                    <Minus className="w-3.5 h-3.5 stroke-[3]" />
+                  </button>
+                  <input
+                    type="number"
+                    min={1}
+                    max={10}
+                    value={setsCount}
+                    onChange={(e) => handleSetsCountChange(e.target.value)}
+                    className="w-14 text-center bg-transparent text-[#E8FD3B] font-black text-base font-mono focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleSetsCountChange(setsCount + 1)}
+                    disabled={setsCount >= 10}
+                    className="w-8 h-8 rounded-lg bg-[#142245] hover:bg-[#1f3468] text-white flex items-center justify-center font-bold text-sm disabled:opacity-30 cursor-pointer transition"
+                    title="1세트 증가 (최대 10세트)"
+                  >
+                    <Plus className="w-3.5 h-3.5 stroke-[3]" />
+                  </button>
+                </div>
+                <span className="text-xs text-slate-400 font-bold">세트 (Sets)</span>
+              </div>
+
+              {/* Quick Preset Buttons */}
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] text-slate-400 mr-1">빠른 선택:</span>
+                {[1, 2, 3, 4, 5].map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => handleSetsCountChange(s)}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                      setsCount === s
+                        ? 'bg-[#E8FD3B] text-black font-black shadow-xs'
+                        : 'bg-[#142245] text-slate-300 hover:bg-[#1c2e5a]'
+                    }`}
+                  >
+                    {s}세트
+                  </button>
+                ))}
+              </div>
+
+              {/* Apply to All Lessons Button */}
+              <button
+                type="button"
+                onClick={handleApplySetsToAllLessons}
+                className="px-3.5 py-2 rounded-xl bg-[#142245] hover:bg-[#1c2e5a] text-[#E8FD3B] border border-[#E8FD3B]/30 hover:border-[#E8FD3B]/60 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+                title="설정한 세트 수를 1~5차시 계획 전체에 일괄 반영합니다."
+              >
+                <span>5차시 전체에 이 세트 수 일괄 적용</span>
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Self Analysis & Goal Statement */}
@@ -711,6 +939,28 @@ export const FittTab: React.FC<FittTabProps> = ({
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
+                  {/* [2. 차시별 개별 저장 버튼] */}
+                  <button
+                    type="button"
+                    onClick={() => handleSaveSingleLesson(idx)}
+                    disabled={savingLessonWeek === lesson.lessonWeek}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 transition cursor-pointer shadow-sm ${
+                      savedLessonWeek === lesson.lessonWeek
+                        ? 'bg-emerald-400 text-black shadow-[0_0_15px_rgba(52,211,153,0.4)]'
+                        : 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40'
+                    }`}
+                    title="다른 차시에 영향 없이 이 차시의 계획 내용만 개별 저장합니다."
+                  >
+                    <Save className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>
+                      {savingLessonWeek === lesson.lessonWeek
+                        ? '저장 중...'
+                        : savedLessonWeek === lesson.lessonWeek
+                        ? '저장 완료!'
+                        : `${lesson.lessonWeek}차시 개별 저장`}
+                    </span>
+                  </button>
+
                   <button
                     type="button"
                     onClick={() => applyToIntervalTimer(lesson)}
@@ -802,7 +1052,22 @@ export const FittTab: React.FC<FittTabProps> = ({
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-2 text-[11px] text-slate-300">
+                    <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-300">
+                      {/* 강도 (Intensity) */}
+                      <div className="flex items-center gap-1">
+                        <span className="text-slate-400">강도:</span>
+                        <input
+                          type="text"
+                          value={lesson.intensity || 'RPE 7'}
+                          onChange={(e) =>
+                            handleLessonChange(idx, 'intensity', e.target.value)
+                          }
+                          placeholder="RPE 7"
+                          className="w-18 bg-[#070e1e] border border-[#1e2f5b] focus:border-sky-400 rounded px-1.5 py-0.5 text-center text-xs font-bold text-sky-300"
+                          title="차시별 운동 강도"
+                        />
+                      </div>
+                      {/* 운동 초 */}
                       <div className="flex items-center gap-1">
                         <span className="text-slate-400">운동:</span>
                         <input
@@ -815,6 +1080,7 @@ export const FittTab: React.FC<FittTabProps> = ({
                         />
                         <span>초</span>
                       </div>
+                      {/* 휴식 초 */}
                       <div className="flex items-center gap-1">
                         <span className="text-slate-400">휴식:</span>
                         <input
@@ -827,16 +1093,40 @@ export const FittTab: React.FC<FittTabProps> = ({
                         />
                         <span>초</span>
                       </div>
+                      {/* 세트 수 (-/input/+) */}
                       <div className="flex items-center gap-1">
                         <span className="text-slate-400">세트:</span>
-                        <input
-                          type="number"
-                          value={lesson.setsCount || 3}
-                          onChange={(e) =>
-                            handleLessonChange(idx, 'setsCount' as any, String(e.target.value))
-                          }
-                          className="w-9 bg-[#070e1e] border border-[#1e2f5b] rounded px-1 text-center text-xs font-bold text-white"
-                        />
+                        <div className="flex items-center bg-[#070e1e] border border-[#1e2f5b] rounded px-1">
+                          <button
+                            type="button"
+                            onClick={() => handleLessonSetsCountChange(idx, (lesson.setsCount || 3) - 1)}
+                            disabled={(lesson.setsCount || 3) <= 1}
+                            className="w-4 h-4 flex items-center justify-center text-slate-400 hover:text-white disabled:opacity-30 cursor-pointer text-xs font-bold"
+                            title="1세트 감소 (최소 1세트)"
+                          >
+                            -
+                          </button>
+                          <input
+                            type="number"
+                            min={1}
+                            max={10}
+                            value={lesson.setsCount || 3}
+                            onChange={(e) =>
+                              handleLessonSetsCountChange(idx, e.target.value)
+                            }
+                            className="w-8 text-center bg-transparent text-xs font-black text-[#E8FD3B] font-mono focus:outline-none"
+                            title="세트 수 (1~10세트)"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleLessonSetsCountChange(idx, (lesson.setsCount || 3) + 1)}
+                            disabled={(lesson.setsCount || 3) >= 10}
+                            className="w-4 h-4 flex items-center justify-center text-slate-400 hover:text-white disabled:opacity-30 cursor-pointer text-xs font-bold"
+                            title="1세트 증가 (최대 10세트)"
+                          >
+                            +
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -958,23 +1248,39 @@ export const FittTab: React.FC<FittTabProps> = ({
                 </div>
               </div>
 
-              {/* Reflection / Diary */}
-              <div className="mt-4 pt-3 border-t border-[#1e2f5b]">
-                <label className="block text-xs font-bold text-slate-300 mb-1">
-                  실천 소감 및 자기 성찰 일지 ({lesson.lessonWeek}차시)
-                </label>
-                <input
-                  type="text"
-                  value={lesson.reflection}
-                  onChange={(e) => handleLessonChange(idx, 'reflection', e.target.value)}
-                  placeholder="예: 초반 셔틀런 페이스를 잘 유지하여 심폐지구력이 강화됨을 체감함."
-                  className="w-full bg-[#0d172e] border border-[#1e2f5b] focus:border-[#E8FD3B] rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
-                />
+              {/* Special Notes & Reflection / Diary */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4 pt-3 border-t border-[#1e2f5b]">
+                <div>
+                  <label className="block text-xs font-bold text-sky-400 mb-1">
+                    특이사항 및 지도 메모 ({lesson.lessonWeek}차시)
+                  </label>
+                  <input
+                    type="text"
+                    value={lesson.specialNotes || ''}
+                    onChange={(e) => handleLessonChange(idx, 'specialNotes', e.target.value)}
+                    placeholder="예: 안전 수칙 준수, 수분 섭취 안내, 특정 관절 부상 대체 종목 등"
+                    className="w-full bg-[#0d172e] border border-[#1e2f5b] focus:border-sky-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                    실천 소감 및 자기 성찰 일지 ({lesson.lessonWeek}차시)
+                  </label>
+                  <input
+                    type="text"
+                    value={lesson.reflection}
+                    onChange={(e) => handleLessonChange(idx, 'reflection', e.target.value)}
+                    placeholder="예: 초반 셔틀런 페이스를 잘 유지하여 심폐지구력이 강화됨을 체감함."
+                    className="w-full bg-[#0d172e] border border-[#1e2f5b] focus:border-[#E8FD3B] rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
+                  />
+                </div>
               </div>
             </div>
           ))}
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 };

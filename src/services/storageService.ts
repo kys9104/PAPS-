@@ -112,6 +112,10 @@ export const DEFAULT_LESSON_PLANS: LessonPlan[] = [
     lessonWeek: 1,
     title: '1차시: 기초 체력 진단 및 심폐지구력 기초 루틴',
     targetFactor: '심폐지구력',
+    focusArea: '심폐지구력 강화',
+    targetGoal: '20m 셔틀런 기초 페이스 조절 및 인터벌 3세트 완주',
+    intensity: 'RPE 7 (약간 힘들다 / 심박수 140~155bpm)',
+    specialNotes: '수분 섭취 충분히 하고 호흡 리듬 일정하게 유지하기',
     warmUp: '동적 관절 가동 스트레칭 5분 + 팔벌려뛰기 50회',
     mainRoutine: '20m 셔틀런 및 8대 유산소 인터벌 순환 트레이닝',
     mainExercises: createDefaultMainExercises('cardio'),
@@ -126,6 +130,10 @@ export const DEFAULT_LESSON_PLANS: LessonPlan[] = [
     lessonWeek: 2,
     title: '2차시: 코어 및 상·하체 근력/근지구력 강화 실습',
     targetFactor: '근력/근지구력',
+    focusArea: '상·하체 및 코어 안정성',
+    targetGoal: '맨몸 스쿼트 & 플랭크 자세 정렬 및 근지구력 향상',
+    intensity: 'RPE 7~8 (힘들다 / 근육 피로도 집중)',
+    specialNotes: '플랭크 시 허리가 꺾이지 않도록 복압 유지',
     warmUp: '루프밴드 힙 활성화 + 가벼운 버피 10회',
     mainRoutine: '8대 저항성 맨몸 근력 인터벌 루틴 (40초 운동 / 20초 휴식)',
     mainExercises: createDefaultMainExercises('strength'),
@@ -140,6 +148,10 @@ export const DEFAULT_LESSON_PLANS: LessonPlan[] = [
     lessonWeek: 3,
     title: '3차시: 관절 가동성 증진 및 유연성 특화 루틴',
     targetFactor: '유연성',
+    focusArea: '고관절 및 햄스트링 가동성',
+    targetGoal: '앉아윗몸앞으로굽히기 기록 +2cm 향상 및 척추 이완',
+    intensity: 'RPE 5~6 (보통 / 호흡 이완 및 정적 유지)',
+    specialNotes: '반동을 주지 않고 호흡을 내쉬며 서서히 늘려주기',
     warmUp: '가벼운 조깅 3분 + 루프밴드 숄더 및 흉추 모빌리티',
     mainRoutine: '앉아윗몸앞으로굽히기 및 8단계 정적 가동성 스트레칭',
     mainExercises: createDefaultMainExercises('flexibility'),
@@ -154,6 +166,10 @@ export const DEFAULT_LESSON_PLANS: LessonPlan[] = [
     lessonWeek: 4,
     title: '4차시: 순발력 및 순간 가속 파워 집중 훈련',
     targetFactor: '순발력',
+    focusArea: '하체 순발력 및 순간 반사능력',
+    targetGoal: '제자리멀리뛰기 착지 안정성 및 플라이오메트릭 파워 강화',
+    intensity: 'RPE 8~9 (매우 힘들다 / 최대 파워 발휘)',
+    specialNotes: '착지 시 무릎 관절 완충 및 발목 부상 유의',
     warmUp: '발목 탄성 바운스 + 파워 하이니 런 20초 2세트',
     mainRoutine: '8대 플라이오메트릭 순발력 점프 & 대시 서킷 트레이닝',
     mainExercises: createDefaultMainExercises('agility'),
@@ -168,6 +184,10 @@ export const DEFAULT_LESSON_PLANS: LessonPlan[] = [
     lessonWeek: 5,
     title: '5차시: PAPS 재측정 대비 전신 서킷 트레이닝 및 종합 평가',
     targetFactor: '종합체력',
+    focusArea: '전신 통합 체력 및 FITT 목표 점검',
+    targetGoal: '5주간 FITT 목표 달성 평가 및 8대 서킷 전원 완주',
+    intensity: 'RPE 8 (힘들다 / 전신 인터벌 서킷 완주)',
+    specialNotes: '실천 소감 및 PAPS 개선 결과 자가 성찰 일지 작성',
     warmUp: '전신 다이내믹 워밍업 7분',
     mainRoutine: '전신 8대 복합 인터벌 서킷 (타바타 8개 스테이션 순환)',
     mainExercises: createDefaultMainExercises('total'),
@@ -450,12 +470,37 @@ export async function saveStudentLessonPlans(
   }
 }
 
+// 4-1. 특정 차시 개별 저장 함수
+export async function saveSingleLessonPlan(
+  studentId: string,
+  lessonWeek: number,
+  updatedPlan: LessonPlan
+): Promise<LessonPlan[]> {
+  const currentPlans = getStudentLessonPlans(studentId);
+  const updated = currentPlans.map((p) =>
+    p.lessonWeek === lessonWeek ? { ...p, ...updatedPlan } : p
+  );
+  await saveStudentLessonPlans(studentId, updated);
+  return updated;
+}
+
 // 5. 운동 실습 기록 (타이머 실습 등)
 export function getStudentWorkoutLogs(studentId: string): WorkoutLog[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.WORKOUT_LOGS);
     const allLogs: WorkoutLog[] = raw ? JSON.parse(raw) : [];
-    return allLogs
+    // Deduplicate by unique log id
+    const seen = new Set<string>();
+    const deduplicated = allLogs.filter((l) => {
+      if (!l.id || seen.has(l.id)) return false;
+      seen.add(l.id);
+      return true;
+    });
+    // If dirty duplicates existed in localStorage, clean up
+    if (deduplicated.length !== allLogs.length) {
+      localStorage.setItem(STORAGE_KEYS.WORKOUT_LOGS, JSON.stringify(deduplicated));
+    }
+    return deduplicated
       .filter((l) => l.studentId === studentId)
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   } catch {
@@ -466,8 +511,15 @@ export function getStudentWorkoutLogs(studentId: string): WorkoutLog[] {
 export async function saveWorkoutLog(log: WorkoutLog): Promise<void> {
   const raw = localStorage.getItem(STORAGE_KEYS.WORKOUT_LOGS);
   const allLogs: WorkoutLog[] = raw ? JSON.parse(raw) : [];
-  const updated = [log, ...allLogs];
-  localStorage.setItem(STORAGE_KEYS.WORKOUT_LOGS, JSON.stringify(updated));
+  const existingIdx = allLogs.findIndex((l) => l.id === log.id);
+
+  let updatedList: WorkoutLog[];
+  if (existingIdx >= 0) {
+    updatedList = allLogs.map((l) => (l.id === log.id ? log : l));
+  } else {
+    updatedList = [log, ...allLogs];
+  }
+  localStorage.setItem(STORAGE_KEYS.WORKOUT_LOGS, JSON.stringify(updatedList));
 
   const db = getFirebaseFirestore();
   if (db) {

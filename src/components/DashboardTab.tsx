@@ -7,7 +7,6 @@ import {
   Flame,
   HeartPulse,
   Sparkles,
-  Copy,
   Check,
   ArrowRight,
   User,
@@ -20,7 +19,8 @@ import {
   Users
 } from 'lucide-react';
 import { StudentProfile, PAPSRecord, FITTPlan, LessonPlan, WorkoutLog } from '../types';
-import { getGradeColor, getGradeLabel, generateNEISRecommendation } from '../data/papsStandards';
+import { getGradeColor, getGradeLabel } from '../data/papsStandards';
+import { getAllStudents } from '../services/storageService';
 
 interface DashboardTabProps {
   student: StudentProfile | null;
@@ -28,9 +28,10 @@ interface DashboardTabProps {
   fittPlan: FITTPlan | null;
   lessonPlans: LessonPlan[];
   workoutLogs: WorkoutLog[];
-  onNavigateTab: (tab: 'dashboard' | 'fitt' | 'paps' | 'exercises' | 'timer' | 'neis' | 'all-students') => void;
+  onNavigateTab: (tab: 'dashboard' | 'fitt' | 'paps' | 'exercises' | 'timer' | 'all-students') => void;
   onOpenAuth: () => void;
   isTeacher?: boolean;
+  onSelectStudent?: (student: StudentProfile) => void;
   onDeleteWorkoutLog?: (logId: string) => void;
   onDeletePapsRecord?: (recordId: string) => void;
   onOpenPasswordModal?: () => void;
@@ -45,11 +46,57 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
   onNavigateTab,
   onOpenAuth,
   isTeacher = false,
+  onSelectStudent,
   onDeleteWorkoutLog,
   onDeletePapsRecord,
   onOpenPasswordModal
 }) => {
-  const [copiedNeisIndex, setCopiedNeisIndex] = useState<number | null>(null);
+  const allStudents = getAllStudents();
+
+  // If teacher is logged in but no student is selected, show the teacher student picker
+  if (!student && isTeacher) {
+    return (
+      <div className="max-w-5xl mx-auto py-12 px-4 space-y-6">
+        <div className="bg-[#0d172e] rounded-3xl border border-[#1e2f5b] p-6 sm:p-8 shadow-xl space-y-5">
+          <div className="flex items-center gap-3 border-b border-[#1e2f5b] pb-4">
+            <div className="w-12 h-12 rounded-2xl bg-[#142245] border border-[#E8FD3B]/40 text-[#E8FD3B] flex items-center justify-center font-black shadow-md shrink-0">
+              <Users className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded-full bg-[#E8FD3B] text-black font-black text-xs">
+                  체육교사 전용
+                </span>
+                <h2 className="text-xl font-black text-white">학생 맞춤형 체력 기록실 열람</h2>
+              </div>
+              <p className="text-xs sm:text-sm text-slate-400 mt-1">
+                신안해양과학고 학생을 선택하시면 해당 학생의 누적 PAPS 측정 데이터, FITT 운동 처방 설계서, 자가 분석 및 5주 실천 목표, 차시별 실습 계획을 즉시 확인하실 수 있습니다.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            {allStudents.map((s) => (
+              <button
+                key={s.id}
+                onClick={() => onSelectStudent?.(s)}
+                className="p-3.5 bg-[#070e1e] hover:bg-[#142245] border border-[#1e2f5b] hover:border-[#E8FD3B]/50 rounded-2xl text-left transition cursor-pointer group shadow-sm"
+              >
+                <div className="flex items-center justify-between text-[11px] text-slate-400 mb-1 font-mono">
+                  <span>1학년 {s.classNum}반 {s.studentNum}번</span>
+                  <span className="text-[10px] text-sky-400 font-bold font-sans">{s.gender}</span>
+                </div>
+                <div className="text-sm font-black text-white group-hover:text-[#E8FD3B] flex items-center justify-between">
+                  <span>{s.name}</span>
+                  <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-[#E8FD3B]" />
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!student) {
     return (
@@ -78,23 +125,44 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
   const completedLessons = lessonPlans.filter((l) => l.isCompleted).length;
   const totalWorkoutMinutes = workoutLogs.reduce((acc, l) => acc + l.durationMinutes, 0);
 
-  // NEIS 세특 추천 문구
-  const neisRec = latestPaps
-    ? generateNEISRecommendation(student.name, latestPaps, fittPlan?.selfAnalysis, completedLessons)
-    : null;
-
-  const handleCopyNeis = (text: string, index: number) => {
-    navigator.clipboard.writeText(text);
-    setCopiedNeisIndex(index);
-    setTimeout(() => setCopiedNeisIndex(null), 2500);
-  };
-
   const papsColors = latestPaps ? getGradeColor(latestPaps.overallGrade) : null;
   const gradeScore = latestPaps ? latestPaps.totalScore : 0;
   const strokeOffset = 440 - (440 * (gradeScore || 20)) / 100;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6 text-white">
+      {/* Teacher Switcher Bar (when teacher is viewing) */}
+      {isTeacher && (
+        <div className="bg-gradient-to-r from-[#142245] to-[#0d172e] border border-[#E8FD3B]/40 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-lg">
+          <div className="flex items-center gap-3">
+            <span className="px-2.5 py-1 rounded-lg bg-[#E8FD3B] text-black font-black text-xs shadow-xs">
+              체육교사 열람 모드
+            </span>
+            <span className="text-xs sm:text-sm text-slate-200">
+              현재 확인 중인 학생: <strong className="text-white underline decoration-[#E8FD3B] underline-offset-4">{student.name}</strong> ({student.grade}학년 {student.classNum}반 {student.studentNum}번)
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2 self-stretch sm:self-auto">
+            <span className="text-xs text-slate-400 shrink-0">학생 전환:</span>
+            <select
+              value={student.id}
+              onChange={(e) => {
+                const target = allStudents.find((s) => s.id === e.target.value);
+                if (target && onSelectStudent) onSelectStudent(target);
+              }}
+              className="bg-[#070e1e] border border-[#1e2f5b] hover:border-[#E8FD3B]/60 rounded-xl px-3 py-1.5 text-xs text-[#E8FD3B] font-bold focus:outline-none cursor-pointer"
+            >
+              {allStudents.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.classNum}반 {s.studentNum}번 {s.name} ({s.gender})
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )}
+
       {/* 1. Student Top Profile Bento Header */}
       <div className="rounded-3xl bg-[#0d172e] border border-[#1e2f5b] p-6 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
@@ -130,29 +198,143 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
           <button
             onClick={() => onNavigateTab('all-students')}
             className="px-3.5 py-2.5 rounded-2xl bg-[#142245] hover:bg-[#1c2e5a] text-slate-200 hover:text-[#E8FD3B] border border-[#1e2f5b] hover:border-[#E8FD3B]/40 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
-            title="1학년 37명 전체 학생 기록실 조회"
+            title="1학년 전체 학생 기록실 조회"
           >
             <Users className="w-4 h-4 text-sky-400" />
-            <span>전체 학생 기록실</span>
+            <span>전체 학생 명단</span>
+          </button>
+          <button
+            onClick={() => onNavigateTab('fitt')}
+            className="px-3.5 py-2.5 rounded-2xl bg-[#142245] hover:bg-[#1c2e5a] text-[#E8FD3B] border border-[#E8FD3B]/30 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+          >
+            <BookOpen className="w-4 h-4" />
+            <span>운동 처방 계획서</span>
           </button>
           <button
             onClick={() => onNavigateTab('paps')}
             className="px-4 py-2.5 rounded-2xl bg-[#142245] hover:bg-[#1c2e5a] text-slate-200 border border-[#1e2f5b] text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
           >
             <HeartPulse className="w-4 h-4 text-[#E8FD3B]" />
-            PAPS 새 측정 등록
+            <span>PAPS 측정 등록</span>
           </button>
           <button
             onClick={() => onNavigateTab('timer')}
             className="px-5 py-2.5 rounded-2xl bg-[#E8FD3B] hover:bg-[#d5eb28] text-black text-xs font-black flex items-center gap-1.5 transition shadow-[0_0_20px_rgba(232,253,59,0.3)] cursor-pointer"
           >
             <Flame className="w-4 h-4 stroke-[2.5]" />
-            스마트 타이머 실습
+            <span>실습 타이머</span>
           </button>
         </div>
       </div>
 
-      {/* 2. Main Bento Grid Section */}
+      {/* 2. 나의 체력 상태 자가 분석 및 5주간 실천 목표 선언문 카드 (User Request 5 & 6) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {/* Card 1: 나의 체력 상태 자가 분석 및 취약점 진단 */}
+        <div className="rounded-3xl bg-[#0d172e] border border-[#1e2f5b] p-6 shadow-xl space-y-3.5 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-[#142245] text-[#E8FD3B] flex items-center justify-center font-bold">
+                  <Activity className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-black text-white">나의 체력 상태 자가 분석 및 취약점 진단</h3>
+                  <p className="text-[11px] text-slate-400">PAPS 5대 체력 요인 실측 기반 개인 체력 강점 및 취약 요인 진단</p>
+                </div>
+              </div>
+              <button
+                onClick={() => onNavigateTab('fitt')}
+                className="text-xs text-[#E8FD3B] hover:underline font-bold cursor-pointer shrink-0"
+              >
+                {fittPlan?.selfAnalysis ? '수정하기' : '작성하기'}
+              </button>
+            </div>
+
+            {fittPlan?.selfAnalysis ? (
+              <div className="p-4 rounded-2xl bg-[#070e1e] border border-[#1e2f5b] space-y-2 mt-3">
+                <div className="flex items-center gap-1.5 text-xs text-[#E8FD3B] font-bold">
+                  <Check className="w-4 h-4" />
+                  <span>체력 자가 진단 및 취약점 분석 완료</span>
+                </div>
+                <p className="text-xs sm:text-sm text-slate-200 leading-relaxed whitespace-pre-line font-sans pl-3 border-l-2 border-[#E8FD3B]">
+                  {fittPlan.selfAnalysis}
+                </p>
+              </div>
+            ) : (
+              <div className="p-6 rounded-2xl bg-[#070e1e] border border-dashed border-[#1e2f5b] text-center space-y-2.5 mt-3">
+                <p className="text-xs text-slate-400">
+                  아직 등록된 체력 상태 자가 분석 및 취약점 진단 내용이 없습니다.
+                </p>
+                <button
+                  onClick={() => onNavigateTab('fitt')}
+                  className="px-4 py-2 rounded-xl bg-[#142245] hover:bg-[#1a2b56] text-[#E8FD3B] text-xs font-bold border border-[#E8FD3B]/30 transition cursor-pointer"
+                >
+                  FITT 탭에서 자가 분석 작성하기
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="pt-2 border-t border-[#1e2f5b] flex items-center justify-between text-[11px] text-slate-400">
+            <span>체육교사 및 본인만 열람 가능한 공식 기록</span>
+            <span className="text-sky-300 font-bold">2022 개정 체육 2</span>
+          </div>
+        </div>
+
+        {/* Card 2: 5주간 실천 목표 선언문 */}
+        <div className="rounded-3xl bg-[#0d172e] border border-[#1e2f5b] p-6 shadow-xl space-y-3.5 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-[#142245] text-amber-400 flex items-center justify-center font-bold">
+                  <Award className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-black text-white">5주간의 실천 목표 선언문 (SMART 원칙)</h3>
+                  <p className="text-[11px] text-slate-400">구체적이고 실현 가능한 5주 체력 증진 다짐 및 목표 선언</p>
+                </div>
+              </div>
+              <button
+                onClick={() => onNavigateTab('fitt')}
+                className="text-xs text-[#E8FD3B] hover:underline font-bold cursor-pointer shrink-0"
+              >
+                {fittPlan?.goalStatement ? '수정하기' : '선언하기'}
+              </button>
+            </div>
+
+            {fittPlan?.goalStatement ? (
+              <div className="p-4 rounded-2xl bg-gradient-to-br from-[#142245] to-[#070e1e] border border-[#E8FD3B]/40 space-y-2 mt-3 shadow-md">
+                <div className="flex items-center gap-1.5 text-xs text-[#E8FD3B] font-bold">
+                  <Sparkles className="w-4 h-4 text-[#E8FD3B]" />
+                  <span>나의 5주 체력 실천 선언문</span>
+                </div>
+                <p className="text-xs sm:text-sm font-bold text-white leading-relaxed whitespace-pre-line pl-3 border-l-2 border-[#E8FD3B]">
+                  "{fittPlan.goalStatement}"
+                </p>
+              </div>
+            ) : (
+              <div className="p-6 rounded-2xl bg-[#070e1e] border border-dashed border-[#1e2f5b] text-center space-y-2.5 mt-3">
+                <p className="text-xs text-slate-400">
+                  아직 작성된 5주간 실천 목표 선언문이 없습니다.
+                </p>
+                <button
+                  onClick={() => onNavigateTab('fitt')}
+                  className="px-4 py-2 rounded-xl bg-[#E8FD3B] hover:bg-[#d5eb28] text-black text-xs font-black transition cursor-pointer shadow-xs"
+                >
+                  5주 실천 목표 선언문 작성하기
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="pt-2 border-t border-[#1e2f5b] flex items-center justify-between text-[11px] text-slate-400">
+            <span>목표 달성 시 세특 및 성취도 평가 반영</span>
+            <span className="text-[#E8FD3B] font-bold">SMART 원칙 준수</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Main Bento Grid Section */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
         {/* Bento 1: PAPS 종합 등급 (col-span-4) */}
         <section className="col-span-12 lg:col-span-4 bg-[#0d172e] rounded-3xl border border-[#1e2f5b] p-6 shadow-xl flex flex-col justify-between">
@@ -616,82 +798,138 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
           )}
         </section>
 
-        {/* Bento 8: NEIS 생활기록부 세특 자동 추천 문구 (col-span-12) */}
-        <section className="col-span-12 bg-[#0d172e] rounded-3xl border border-[#1e2f5b] p-6 shadow-xl space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        {/* Bento 8: 차시별(1~5차시) 맞춤형 운동 처방 실습 계획 및 8개 본운동 루틴 (User Request 5 & 6) */}
+        <section className="col-span-12 bg-[#0d172e] rounded-3xl border border-[#1e2f5b] p-6 shadow-xl space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#1e2f5b] pb-4">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-2xl bg-[#142245] border border-[#E8FD3B]/30 text-[#E8FD3B] flex items-center justify-center font-black shadow-xs shrink-0">
-                <Sparkles className="w-4 h-4" />
+              <div className="w-10 h-10 rounded-2xl bg-[#142245] border border-[#E8FD3B]/30 text-[#E8FD3B] flex items-center justify-center font-black shadow-xs shrink-0">
+                <BookOpen className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-white">
-                  체육과 교육과정 생활기록부(NEIS) 세특 자동 추천 문구
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <span>차시별(1~5차시) 맞춤형 운동 처방 실습 계획 및 8개 본운동 루틴 일람</span>
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-[#142245] text-sky-300 border border-sky-500/20 font-normal">
+                    전체 {lessonPlans.length || 5}차시
+                  </span>
                 </h3>
-                <p className="text-xs text-slate-400">
-                  2022 개정 체육 2 교과 성취기준 및 학생의 PAPS 실측 결과, FITT 실천 역량 기반 서술형 문구
+                <p className="text-xs text-slate-400 mt-0.5">
+                  차시별로 계획된 8개 본운동 순환 종목, 운동·휴식 시간 및 세트 수가 안전하게 저장되어 있습니다.
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-2 self-start sm:self-auto">
               <button
-                onClick={() => onNavigateTab('neis')}
+                onClick={() => onNavigateTab('fitt')}
+                className="px-3.5 py-1.5 rounded-xl bg-[#142245] hover:bg-[#1a2b56] text-[#E8FD3B] text-xs font-bold border border-[#E8FD3B]/30 transition cursor-pointer"
+              >
+                처방 계획서 작성·수정
+              </button>
+              <button
+                onClick={() => onNavigateTab('timer')}
                 className="px-3.5 py-1.5 rounded-xl bg-[#E8FD3B] hover:bg-[#d5eb28] text-black text-xs font-black flex items-center gap-1.5 transition cursor-pointer shadow-xs"
               >
-                <span>세특 생성기 & 수동 에디터 열기</span>
+                <span>인터벌 타이머 실습</span>
                 <ChevronRight className="w-3.5 h-3.5 stroke-[3]" />
               </button>
             </div>
           </div>
 
-          {latestPaps && neisRec ? (
-            <div className="space-y-3">
-              {neisRec.options.map((optionText, idx) => {
-                const isCopied = copiedNeisIndex === idx;
-                return (
-                  <div
-                    key={idx}
-                    className="p-4 bg-[#070e1e] rounded-2xl border border-[#1e2f5b] hover:border-[#E8FD3B]/40 transition flex items-start justify-between gap-4"
-                  >
-                    <div className="space-y-1">
-                      <span className="text-[11px] font-bold text-[#E8FD3B] block">
-                        추천 옵션 {idx + 1} ({idx === 0 ? '종합 성장형' : idx === 1 ? '처방 실천형' : '역량 함양형'})
+          <div className="space-y-4">
+            {lessonPlans.map((lp) => {
+              const wTime = lp.workTimeSeconds || 40;
+              const rTime = lp.restTimeSeconds || 20;
+              const setCnt = lp.mainExercises?.length || lp.setsCount || 8;
+              const isDone = lp.isCompleted;
+
+              return (
+                <div
+                  key={lp.lessonWeek}
+                  className={`p-4 sm:p-5 rounded-2xl border transition space-y-3 ${
+                    isDone
+                      ? 'bg-[#070e1e] border-emerald-500/40'
+                      : 'bg-[#070e1e] border-[#1e2f5b] hover:border-[#E8FD3B]/40'
+                  }`}
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#1e2f5b]/60 pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <span className="w-7 h-7 rounded-xl bg-[#E8FD3B] text-black font-black text-xs flex items-center justify-center shrink-0">
+                        {lp.lessonWeek}
                       </span>
-                      <p className="text-xs sm:text-sm text-slate-200 leading-relaxed font-sans">
-                        {optionText}
-                      </p>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-extrabold text-white text-sm">{lp.title}</h4>
+                          <span className="text-[10px] px-2 py-0.5 rounded-md bg-[#142245] text-sky-300 font-bold border border-sky-500/20">
+                            {lp.targetFactor || '맞춤체력'}
+                          </span>
+                          {isDone && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 font-black border border-emerald-500/40">
+                              실습 완료
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-xs text-slate-400">{lp.focusArea || 'PAPS 체력 증진'}</span>
+                      </div>
                     </div>
-                    <button
-                      onClick={() => handleCopyNeis(optionText, idx)}
-                      className={`shrink-0 p-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
-                        isCopied
-                          ? 'bg-[#E8FD3B] text-black font-black'
-                          : 'bg-[#142245] text-slate-300 hover:text-white border border-[#1e2f5b]'
-                      }`}
-                      title="클립보드에 복사"
-                    >
-                      {isCopied ? (
-                        <>
-                          <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                          <span>복사 완료!</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-3.5 h-3.5 text-slate-400" />
-                          <span className="hidden sm:inline">문구 복사</span>
-                        </>
-                      )}
-                    </button>
+
+                    <div className="flex items-center gap-3 text-xs text-slate-300 self-start sm:self-auto">
+                      <span className="bg-[#0d172e] px-2.5 py-1 rounded-lg border border-[#1e2f5b]">
+                        운동 <strong className="text-white font-mono">{wTime}초</strong> / 휴식 <strong className="text-white font-mono">{rTime}초</strong>
+                      </span>
+                      <span className="bg-[#0d172e] px-2.5 py-1 rounded-lg border border-[#1e2f5b] text-[#E8FD3B] font-bold">
+                        {setCnt}세트 실습
+                      </span>
+                      <button
+                        onClick={() => onNavigateTab('timer')}
+                        className="px-3 py-1 rounded-lg bg-[#E8FD3B] hover:bg-[#d5eb28] text-black text-xs font-black transition cursor-pointer"
+                      >
+                        타이머 연동
+                      </button>
+                    </div>
                   </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="p-6 text-center bg-[#070e1e] rounded-2xl border border-dashed border-[#1e2f5b]">
-              <p className="text-xs text-slate-400">
-                PAPS 체력 측정을 등록하시면 학생 맞춤형 NEIS 세특 서술형 문구가 자동으로 조합 생성됩니다.
-              </p>
-            </div>
-          )}
+
+                  {/* Warmup & Cooldown details */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                    <div className="bg-[#0d172e] p-2.5 rounded-xl border border-[#1e2f5b]">
+                      <span className="text-slate-400 font-bold block text-[11px] mb-0.5">준비운동 (Warm-up)</span>
+                      <span className="text-slate-200">{lp.warmupDetails || '동적 스트레칭 및 가벼운 조깅 5~8분'}</span>
+                    </div>
+                    <div className="bg-[#0d172e] p-2.5 rounded-xl border border-[#1e2f5b]">
+                      <span className="text-slate-400 font-bold block text-[11px] mb-0.5">정리운동 (Cool-down)</span>
+                      <span className="text-slate-200">{lp.cooldownDetails || '정적 스트레칭 및 심호흡 5~7분'}</span>
+                    </div>
+                  </div>
+
+                  {/* 8 Main Exercise Slots */}
+                  {lp.mainExercises && lp.mainExercises.length > 0 && (
+                    <div className="space-y-1.5 pt-1">
+                      <span className="text-[11px] font-bold text-slate-400 block">
+                        본운동(Main Workout) 8개 순환 종목 계획:
+                      </span>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                        {lp.mainExercises.map((ex, idx) => (
+                          <div
+                            key={idx}
+                            className="p-2.5 bg-[#0d172e] rounded-xl border border-[#1e2f5b] flex items-center justify-between text-xs"
+                          >
+                            <div className="min-w-0 pr-1">
+                              <div className="flex items-center gap-1">
+                                <span className="text-[10px] font-mono text-[#E8FD3B] font-bold">{idx + 1}.</span>
+                                <span className="font-bold text-white truncate block">{ex.name}</span>
+                              </div>
+                              <span className="text-[10px] text-slate-400 block truncate">{ex.category}</span>
+                            </div>
+                            <span className="text-[11px] text-sky-300 font-mono font-bold bg-[#142245] px-1.5 py-0.5 rounded shrink-0">
+                              {ex.durationOrReps || '15회'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </section>
 
         {/* Bento 9: 최근 운동 실습 이력 타임라인 (col-span-12) */}

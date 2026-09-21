@@ -38,6 +38,7 @@ interface FittTabProps {
   onUpdateFittPlan: (plan: FITTPlan) => void;
   onUpdateLessonPlans: (plans: LessonPlan[]) => void;
   onOpenAuth: () => void;
+  onNavigateDashboard?: () => void;
   onApplyToIntervalTimer?: (lesson: LessonPlan) => void;
   onOpenGasSettings?: () => void;
   initialViewMode?: 'view' | 'edit';
@@ -50,6 +51,7 @@ export const FittTab: React.FC<FittTabProps> = ({
   onUpdateFittPlan,
   onUpdateLessonPlans,
   onOpenAuth,
+  onNavigateDashboard,
   onApplyToIntervalTimer,
   onOpenGasSettings,
   initialViewMode = 'edit'
@@ -367,7 +369,7 @@ export const FittTab: React.FC<FittTabProps> = ({
       });
 
       setStatusMessage({
-        text: `FITT 운동 처방이 저장되었습니다! ${syncRes.success ? '(구글 시트 연동 완료)' : ''}`,
+        text: `FITT 운동 처방(자가 분석 및 5주 실천 목표 포함)이 [나의 기록실]에 안전하게 저장되었습니다! ${syncRes.success ? '(구글 시트 연동 완료)' : ''}`,
         type: 'success'
       });
     } catch {
@@ -483,7 +485,17 @@ export const FittTab: React.FC<FittTabProps> = ({
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {onNavigateDashboard && (
+              <button
+                onClick={onNavigateDashboard}
+                className="px-4 py-2.5 rounded-2xl bg-[#142245] hover:bg-[#1c2e5a] text-[#E8FD3B] border border-[#E8FD3B]/30 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer"
+                title="저장된 운동 처방 및 실천 목표를 나의 기록실에서 확인합니다"
+              >
+                <BookOpen className="w-4 h-4 text-[#E8FD3B]" />
+                <span>나의 기록실에서 확인</span>
+              </button>
+            )}
             <button
               onClick={handleExportFittToGas}
               disabled={isSyncing}
@@ -506,14 +518,24 @@ export const FittTab: React.FC<FittTabProps> = ({
 
         {statusMessage && (
           <div
-            className={`mt-4 p-3.5 rounded-2xl text-xs flex items-center gap-2 border shadow-sm ${
+            className={`mt-4 p-3.5 rounded-2xl text-xs flex flex-wrap items-center justify-between gap-2 border shadow-sm ${
               statusMessage.type === 'success'
                 ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300 font-bold'
                 : 'bg-rose-950/60 border-rose-500/40 text-rose-300 font-bold'
             }`}
           >
-            <CheckCircle2 className="w-4 h-4 shrink-0 text-[#E8FD3B]" />
-            <span>{statusMessage.text}</span>
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 shrink-0 text-[#E8FD3B]" />
+              <span>{statusMessage.text}</span>
+            </div>
+            {statusMessage.type === 'success' && onNavigateDashboard && (
+              <button
+                onClick={onNavigateDashboard}
+                className="px-3 py-1 bg-[#E8FD3B] hover:bg-[#d5eb28] text-black rounded-xl font-black text-[11px] transition cursor-pointer ml-auto"
+              >
+                나의 기록실 바로가기 →
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -576,176 +598,238 @@ export const FittTab: React.FC<FittTabProps> = ({
         />
       ) : (
         <>
-      {/* 2. Educational Theory: 5 Principles of Physical Fitness Checklist */}
-      <div className="rounded-3xl bg-[#0d172e] border border-[#1e2f5b] p-6 space-y-4 shadow-xl">
-        <div className="flex items-center justify-between">
+      {/* 3. FITT Prescription Form */}
+      <div className="rounded-3xl bg-[#0d172e] border border-[#1e2f5b] p-6 space-y-6 shadow-xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#1e2f5b] pb-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-[#142245] text-[#E8FD3B] border border-[#E8FD3B]/30 flex items-center justify-center shadow-xs">
-              <FileCheck className="w-5 h-5" />
+            <div className="w-10 h-10 rounded-2xl bg-[#142245] text-sky-400 border border-sky-500/30 flex items-center justify-center shadow-xs">
+              <Target className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-white">
-                체력 증진 5대 기본 원리 자가 점검 체크리스트
-              </h3>
+              <h3 className="text-base font-bold text-white">FITT 4대 요소 맞춤형 설계서</h3>
               <p className="text-xs text-slate-400">
-                운동 처방을 수립할 때 다음 과학적 체력 증진 원리가 반영되었는지 직접 점검하세요.
+                드롭다운 추천 선택 또는 직접 입력을 통해 학생 맞춤형 운동 빈도, 강도, 시간, 형태를 설정합니다.
               </p>
             </div>
           </div>
-          <span
-            className={`text-xs px-3 py-1 rounded-full font-bold border ${
-              allPrinciplesChecked
-                ? 'bg-[#E8FD3B]/10 text-[#E8FD3B] border-[#E8FD3B]/30'
-                : 'bg-amber-950/60 text-amber-300 border-amber-500/30'
-            }`}
-          >
-            {allPrinciplesChecked ? '5대 원리 완벽 충족' : '점검 필요'}
+          <span className="text-[11px] font-bold text-sky-300 bg-sky-950/60 px-3 py-1 rounded-full border border-sky-800/60 self-start sm:self-auto">
+            드롭다운 & 수동 설정 지원
           </span>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pt-2">
-          {[
-            {
-              key: 'overload',
-              name: '1. 과부하의 원리 (Overload)',
-              desc: '일상적인 신체 활동 수준보다 높은 자극을 가하여 근육과 심폐 기관의 적응을 유도함.'
-            },
-            {
-              key: 'progression',
-              name: '2. 점진성의 원리 (Progression)',
-              desc: '체력 향상 속도에 맞추어 운동 강도와 시간을 단계적으로 서서히 늘려나감.'
-            },
-            {
-              key: 'specificity',
-              name: '3. 특수성의 원리 (Specificity)',
-              desc: '개선하고자 하는 특정 체력 요소(예: 유연성 향상 시 좌전굴 스트레칭)에 맞는 종목을 선택함.'
-            },
-            {
-              key: 'individuality',
-              name: '4. 개별성의 원리 (Individuality)',
-              desc: '자신의 체력 수준, 성별, 신체 발달 단계 및 건강 상태를 고려하여 맞춤형으로 설계함.'
-            },
-            {
-              key: 'continuity',
-              name: '5. 지속성/반복성의 원리 (Continuity)',
-              desc: '주 3회 이상 주기적이고 규칙적으로 실천하여 훈련 효과의 퇴보(가역성)를 방지함.'
-            }
-          ].map((item) => {
-            const isChecked = principles[item.key as keyof typeof principles];
-            return (
-              <label
-                key={item.key}
-                className={`p-4 rounded-2xl border cursor-pointer transition flex items-start gap-3 select-none ${
-                  isChecked
-                    ? 'bg-[#070e1e] border-[#E8FD3B]/40 text-white shadow-xs'
-                    : 'bg-[#070e1e]/60 border-[#1e2f5b] text-slate-400 hover:bg-[#142245]'
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  checked={isChecked}
-                  onChange={(e) =>
-                    setPrinciples((prev) => ({ ...prev, [item.key]: e.target.checked }))
-                  }
-                  className="mt-1 w-4 h-4 accent-[#E8FD3B]"
-                />
-                <div>
-                  <span className={`font-bold text-xs block ${isChecked ? 'text-[#E8FD3B]' : 'text-slate-300'}`}>
-                    {item.name}
-                  </span>
-                  <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">{item.desc}</p>
-                </div>
-              </label>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* 3. FITT Prescription Form */}
-      <div className="rounded-3xl bg-[#0d172e] border border-[#1e2f5b] p-6 space-y-6 shadow-xl">
-        <div className="flex items-center gap-3 border-b border-[#1e2f5b] pb-4">
-          <div className="w-10 h-10 rounded-2xl bg-[#142245] text-sky-400 border border-sky-500/30 flex items-center justify-center shadow-xs">
-            <Target className="w-5 h-5" />
-          </div>
-          <div>
-            <h3 className="text-base font-bold text-white">FITT 4대 요소 맞춤형 설계서</h3>
-            <p className="text-xs text-slate-400">
-              운동 형태, 운동 강도, 운동 시간, 운동 빈도를 구체적으로 작성하세요.
-            </p>
-          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* F: Frequency */}
-          <div className="p-4 bg-[#070e1e] rounded-2xl border border-[#1e2f5b] space-y-2">
-            <label className="text-xs font-bold text-[#E8FD3B] flex items-center gap-1.5">
-              <Calendar className="w-4 h-4" />
-              F (Frequency - 운동 빈도)
-            </label>
-            <p className="text-[11px] text-slate-400">
-              일주일에 몇 회, 어느 요일에 규칙적으로 운동할 것인가?
-            </p>
-            <input
-              type="text"
-              value={frequency}
-              onChange={(e) => setFrequency(e.target.value)}
-              placeholder="예: 주 3~4회 (월, 수, 금, 토요일 방과후)"
-              className="w-full bg-[#0d172e] border border-[#1e2f5b] focus:border-[#E8FD3B] rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
-            />
+          <div className="p-4 bg-[#070e1e] rounded-2xl border border-[#1e2f5b] space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-[#E8FD3B] flex items-center gap-1.5">
+                <Calendar className="w-4 h-4" />
+                F (Frequency - 운동 빈도)
+              </label>
+              <span className="text-[10px] text-slate-400">규칙적 실천 주기</span>
+            </div>
+
+            {/* Dropdown Preset */}
+            <div>
+              <label className="block text-[10px] font-bold text-slate-400 mb-1">
+                추천 빈도 선택 (클릭 시 자동 반영):
+              </label>
+              <select
+                onChange={(e) => {
+                  if (e.target.value) setFrequency(e.target.value);
+                }}
+                defaultValue=""
+                className="w-full bg-[#0d172e] border border-[#1e2f5b] hover:border-[#E8FD3B]/50 focus:border-[#E8FD3B] rounded-xl px-3 py-2 text-xs text-white focus:outline-none cursor-pointer"
+              >
+                <option value="">추천 빈도 드롭다운 선택 ▼</option>
+                <option value="주 3회 (월·수·금 방과후 실습)">주 3회 (월·수·금 방과후 실습)</option>
+                <option value="주 4회 (월·수·금·토 집중 실습)">주 4회 (월·수·금·토 집중 실습)</option>
+                <option value="주 2~3회 (화·목 방과후 + 주말 1회)">주 2~3회 (화·목 방과후 + 주말 1회)</option>
+                <option value="주 5회 (월~금 점심시간 & 방과후 체력단련)">주 5회 (월~금 점심시간 & 방과후)</option>
+                <option value="주 2회 (주말 집중 체력 증진)">주 2회 (주말 집중 체력 증진)</option>
+              </select>
+            </div>
+
+            {/* Manual Input */}
+            <div>
+              <label className="block text-[10px] font-bold text-slate-400 mb-1">
+                직접 수정 / 수동 입력:
+              </label>
+              <input
+                type="text"
+                value={frequency}
+                onChange={(e) => setFrequency(e.target.value)}
+                placeholder="예: 주 3~4회 (월, 수, 금, 토요일 방과후)"
+                className="w-full bg-[#0d172e] border border-[#1e2f5b] focus:border-[#E8FD3B] rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-medium"
+              />
+            </div>
           </div>
 
           {/* I: Intensity */}
-          <div className="p-4 bg-[#070e1e] rounded-2xl border border-[#1e2f5b] space-y-2">
-            <label className="text-xs font-bold text-sky-400 flex items-center gap-1.5">
-              <Flame className="w-4 h-4" />
-              I (Intensity - 운동 강도)
-            </label>
-            <p className="text-[11px] text-slate-400">
-              RPE(자각적 운동강도 1~10 척도) 또는 심박수 목표치 설정
-            </p>
-            <input
-              type="text"
-              value={intensity}
-              onChange={(e) => setIntensity(e.target.value)}
-              placeholder="예: RPE 7~8 (호흡이 가쁘고 대화가 약간 어려울 정도)"
-              className="w-full bg-[#0d172e] border border-[#1e2f5b] focus:border-sky-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
-            />
+          <div className="p-4 bg-[#070e1e] rounded-2xl border border-[#1e2f5b] space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-sky-400 flex items-center gap-1.5">
+                <Flame className="w-4 h-4" />
+                I (Intensity - 운동 강도)
+              </label>
+              <span className="text-[10px] text-slate-400">RPE 1~10 & 심박수</span>
+            </div>
+
+            {/* Dropdown Preset */}
+            <div>
+              <label className="block text-[10px] font-bold text-slate-400 mb-1">
+                추천 강도 선택 (클릭 시 자동 반영):
+              </label>
+              <select
+                onChange={(e) => {
+                  if (e.target.value) setIntensity(e.target.value);
+                }}
+                defaultValue=""
+                className="w-full bg-[#0d172e] border border-[#1e2f5b] hover:border-sky-400/50 focus:border-sky-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none cursor-pointer"
+              >
+                <option value="">추천 강도 드롭다운 선택 ▼</option>
+                <option value="RPE 7~8 (약간 힘듦 / 호흡 가쁘고 대화 다소 어려움)">
+                  RPE 7~8 (약간 힘듦 / 호흡 가쁘고 대화 다소 어려움 / 권장)
+                </option>
+                <option value="RPE 5~6 (보통 / 약간 땀이 나며 호흡 대화 가능)">
+                  RPE 5~6 (보통 / 약간 땀이 나며 호흡 대화 가능)
+                </option>
+                <option value="RPE 8~9 (매우 힘듦 / 고강도 인터벌 스프린트)">
+                  RPE 8~9 (매우 힘듦 / 고강도 인터벌 스프린트)
+                </option>
+                <option value="RPE 4~5 (가벼움 / 회복 및 유연성 중심)">
+                  RPE 4~5 (가벼움 / 회복 및 유연성 중심)
+                </option>
+              </select>
+            </div>
+
+            {/* Manual Input */}
+            <div>
+              <label className="block text-[10px] font-bold text-slate-400 mb-1">
+                직접 수정 / 수동 입력:
+              </label>
+              <input
+                type="text"
+                value={intensity}
+                onChange={(e) => setIntensity(e.target.value)}
+                placeholder="예: RPE 7~8 (호흡이 가쁘고 대화가 약간 어려울 정도)"
+                className="w-full bg-[#0d172e] border border-[#1e2f5b] focus:border-sky-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-medium"
+              />
+            </div>
           </div>
 
           {/* T: Time */}
-          <div className="p-4 bg-[#070e1e] rounded-2xl border border-[#1e2f5b] space-y-2">
-            <label className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
-              <Clock className="w-4 h-4" />
-              T (Time - 운동 시간)
-            </label>
-            <p className="text-[11px] text-slate-400">
-              1회당 지속 시간 및 워밍업·본운동·쿨다운 시간 배분
-            </p>
-            <input
-              type="text"
-              value={time}
-              onChange={(e) => setTime(e.target.value)}
-              placeholder="예: 1회 45분 (워밍업 5분 + 본실습 35분 + 정리 5분)"
-              className="w-full bg-[#0d172e] border border-[#1e2f5b] focus:border-amber-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
-            />
+          <div className="p-4 bg-[#070e1e] rounded-2xl border border-[#1e2f5b] space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
+                <Clock className="w-4 h-4" />
+                T (Time - 운동 시간)
+              </label>
+              <span className="text-[10px] text-slate-400">회당 지속 시간 배분</span>
+            </div>
+
+            {/* Dropdown Preset */}
+            <div>
+              <label className="block text-[10px] font-bold text-slate-400 mb-1">
+                추천 시간 선택 (클릭 시 자동 반영):
+              </label>
+              <select
+                onChange={(e) => {
+                  if (e.target.value) setTime(e.target.value);
+                }}
+                defaultValue=""
+                className="w-full bg-[#0d172e] border border-[#1e2f5b] hover:border-amber-400/50 focus:border-amber-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none cursor-pointer"
+              >
+                <option value="">추천 시간 드롭다운 선택 ▼</option>
+                <option value="1회 45분 (워밍업 5분 + 본실습 35분 + 쿨다운 5분)">
+                  1회 45분 (워밍업 5분 + 본실습 35분 + 쿨다운 5분 / 정규)
+                </option>
+                <option value="1회 30분 (워밍업 5분 + 고강도 인터벌 20분 + 쿨다운 5분)">
+                  1회 30분 (워밍업 5분 + 고강도 인터벌 20분 + 쿨다운 5분)
+                </option>
+                <option value="1회 50분 (체육수업 블록 타임 / 본운동 40분)">
+                  1회 50분 (체육수업 블록 타임 / 본운동 40분)
+                </option>
+                <option value="1회 20분 (점심시간 틈새 타바타 인터벌 서킷)">
+                  1회 20분 (점심시간 틈새 타바타 인터벌 서킷)
+                </option>
+                <option value="1회 60분 (주말 체력 증진 종합 단련)">
+                  1회 60분 (주말 체력 증진 종합 단련)
+                </option>
+              </select>
+            </div>
+
+            {/* Manual Input */}
+            <div>
+              <label className="block text-[10px] font-bold text-slate-400 mb-1">
+                직접 수정 / 수동 입력:
+              </label>
+              <input
+                type="text"
+                value={time}
+                onChange={(e) => setTime(e.target.value)}
+                placeholder="예: 1회 45분 (워밍업 5분 + 본실습 35분 + 정리 5분)"
+                className="w-full bg-[#0d172e] border border-[#1e2f5b] focus:border-amber-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-medium"
+              />
+            </div>
           </div>
 
           {/* T: Type */}
-          <div className="p-4 bg-[#070e1e] rounded-2xl border border-[#1e2f5b] space-y-2">
-            <label className="text-xs font-bold text-purple-400 flex items-center gap-1.5">
-              <Activity className="w-4 h-4" />
-              T (Type - 운동 형태/종목)
-            </label>
-            <p className="text-[11px] text-slate-400">
-              자신의 취약 체력 요인을 보완하기 위한 종목 조합
-            </p>
-            <input
-              type="text"
-              value={type}
-              onChange={(e) => setType(e.target.value)}
-              placeholder="예: 셔틀런 인터벌 + 맨몸 스쿼트 & 플랭크 저항 운동"
-              className="w-full bg-[#0d172e] border border-[#1e2f5b] focus:border-purple-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
-            />
+          <div className="p-4 bg-[#070e1e] rounded-2xl border border-[#1e2f5b] space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-purple-400 flex items-center gap-1.5">
+                <Activity className="w-4 h-4" />
+                T (Type - 운동 형태/종목)
+              </label>
+              <span className="text-[10px] text-slate-400">취약 요인 보완 종목</span>
+            </div>
+
+            {/* Dropdown Preset */}
+            <div>
+              <label className="block text-[10px] font-bold text-slate-400 mb-1">
+                추천 형태 선택 (클릭 시 자동 반영):
+              </label>
+              <select
+                onChange={(e) => {
+                  if (e.target.value) setType(e.target.value);
+                }}
+                defaultValue=""
+                className="w-full bg-[#0d172e] border border-[#1e2f5b] hover:border-purple-400/50 focus:border-purple-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none cursor-pointer"
+              >
+                <option value="">추천 형태 드롭다운 선택 ▼</option>
+                <option value="유산소 인터벌(셔틀런·스텝박스) + 맨몸 근력(스쿼트·푸시업·플랭크)">
+                  유산소 인터벌(셔틀런·스텝박스) + 맨몸 근력(스쿼트·푸시업·플랭크)
+                </option>
+                <option value="심폐지구력 특화 인터벌 서킷 (왕복오래달리기 & 버피 점프)">
+                  심폐지구력 특화 인터벌 서킷 (왕복오래달리기 & 버피 점프)
+                </option>
+                <option value="근력·근지구력 강화 루틴 (스쿼트, 런지, 푸시업, 크런치, 플랭크)">
+                  근력·근지구력 강화 루틴 (스쿼트, 런지, 푸시업, 크런치, 플랭크)
+                </option>
+                <option value="순발력 & 민첩성 향상 서킷 (점프 스쿼트, 버피 점프, 50m 질주)">
+                  순발력 & 민첩성 향상 서킷 (점프 스쿼트, 버피 점프, 50m 질주)
+                </option>
+                <option value="유연성 및 코어 안정화 (좌전굴 스트레칭 & 요가 매트 체조)">
+                  유연성 및 코어 안정화 (좌전굴 스트레칭 & 요가 매트 체조)
+                </option>
+                <option value="체지방 감소 및 체중 관리 종합 유산소·근력 순환 트레이닝">
+                  체지방 감소 및 체중 관리 종합 유산소·근력 순환 트레이닝
+                </option>
+              </select>
+            </div>
+
+            {/* Manual Input */}
+            <div>
+              <label className="block text-[10px] font-bold text-slate-400 mb-1">
+                직접 수정 / 수동 입력:
+              </label>
+              <input
+                type="text"
+                value={type}
+                onChange={(e) => setType(e.target.value)}
+                placeholder="예: 셔틀런 인터벌 + 맨몸 스쿼트 & 플랭크 저항 운동"
+                className="w-full bg-[#0d172e] border border-[#1e2f5b] focus:border-purple-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-medium"
+              />
+            </div>
           </div>
 
           {/* S: Sets (세트 수 수동 설정 기능) */}

@@ -36,7 +36,6 @@ import { FittTab } from './components/FittTab';
 import { PapsTab } from './components/PapsTab';
 import { ExerciseGuideTab } from './components/ExerciseGuideTab';
 import { TimerTab } from './components/TimerTab';
-import { NeisTab } from './components/NeisTab';
 import { AllStudentsTab } from './components/AllStudentsTab';
 import { LoginView } from './components/LoginView';
 import { GasSettingsModal } from './components/GasSettingsModal';
@@ -44,7 +43,7 @@ import { Waves } from 'lucide-react';
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState<
-    'dashboard' | 'fitt' | 'paps' | 'exercises' | 'timer' | 'neis' | 'all-students'
+    'dashboard' | 'fitt' | 'paps' | 'exercises' | 'timer' | 'all-students'
   >('dashboard');
 
   const [student, setStudent] = useState<StudentProfile | null>(null);
@@ -142,8 +141,7 @@ export default function App() {
         },
         totalScore: 88,
         overallGrade: 1,
-        neisNote:
-          '신안해양과학고 1학년 체육 수업에서 왕복오래달리기 68회, 제자리멀리뛰기 235cm를 기록하며 전 영역에서 고른 기초 체력을 과시함. 과부하 및 점진성의 원리를 이해하고 주 4회 규칙적인 인터벌 트레이닝을 성실히 이행함.'
+        neisNote: ''
       };
       savePapsRecord(samplePaps);
 
@@ -345,6 +343,10 @@ export default function App() {
             onNavigateTab={setCurrentTab}
             onOpenAuth={() => setIsAuthOpen(true)}
             isTeacher={isTeacher}
+            onSelectStudent={(selected) => {
+              setCurrentStudent(selected);
+              refreshStudentData(selected);
+            }}
             onDeleteWorkoutLog={handleDeleteWorkoutLog}
             onDeletePapsRecord={handleDeletePapsRecord}
             onOpenPasswordModal={() => setIsPasswordModalOpen(true)}
@@ -371,6 +373,7 @@ export default function App() {
             onUpdateFittPlan={(plan) => setFittPlan(plan)}
             onUpdateLessonPlans={(plans) => setLessonPlans(plans)}
             onOpenAuth={() => setIsAuthOpen(true)}
+            onNavigateDashboard={() => setCurrentTab('dashboard')}
             onApplyToIntervalTimer={(lesson) => {
               setAppliedLessonPlan(lesson);
               setCurrentTab('timer');
@@ -388,21 +391,6 @@ export default function App() {
             onOpenAuth={() => setIsAuthOpen(true)}
             isTeacher={isTeacher}
             onDeleteRecord={handleDeletePapsRecord}
-          />
-        )}
-
-        {currentTab === 'neis' && (
-          <NeisTab
-            student={student}
-            papsRecords={papsRecords}
-            fittPlan={fittPlan}
-            lessonPlans={lessonPlans}
-            workoutLogs={workoutLogs}
-            onOpenAuth={() => setIsAuthOpen(true)}
-            isTeacher={isTeacher}
-            onOpenTeacherLogin={() => setIsTeacherLoginOpen(true)}
-            onNavigateTab={setCurrentTab}
-            onSelectStudent={handleAuthSuccess}
           />
         )}
 

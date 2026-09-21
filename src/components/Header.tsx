@@ -21,8 +21,8 @@ import { getFirebaseFirestore } from '../services/firebaseConfig';
 import { getTeacherSettings } from '../services/storageService';
 
 interface HeaderProps {
-  currentTab: 'dashboard' | 'fitt' | 'paps' | 'exercises' | 'timer' | 'neis' | 'all-students';
-  onSelectTab: (tab: 'dashboard' | 'fitt' | 'paps' | 'exercises' | 'timer' | 'neis' | 'all-students') => void;
+  currentTab: 'dashboard' | 'fitt' | 'paps' | 'exercises' | 'timer' | 'all-students';
+  onSelectTab: (tab: 'dashboard' | 'fitt' | 'paps' | 'exercises' | 'timer' | 'all-students') => void;
   student: StudentProfile | null;
   onOpenAuth: () => void;
   onLogout: () => void;
@@ -54,7 +54,6 @@ export const Header: React.FC<HeaderProps> = ({
     { id: 'all-students', label: '전체 학생 기록실', icon: Users },
     { id: 'fitt', label: 'FITT 운동 처방 & 5차시', icon: BookOpen },
     { id: 'paps', label: 'PAPS 측정 & 등급 판정', icon: HeartPulse },
-    { id: 'neis', label: '생활기록부 세특 생성기', icon: FileText },
     { id: 'exercises', label: '4대 체력 운동 가이드', icon: Activity },
     { id: 'timer', label: '스마트 실습 타이머', icon: TimerIcon },
   ] as const;

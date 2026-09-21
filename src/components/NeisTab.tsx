@@ -25,7 +25,8 @@ import {
   Lock,
   KeyRound,
   ShieldCheck,
-  ShieldAlert
+  ShieldAlert,
+  Trash2
 } from 'lucide-react';
 import {
   StudentProfile,
@@ -42,6 +43,8 @@ import {
 import {
   getStudentNeisNote,
   saveStudentNeisNote,
+  deleteStudentNeisNote,
+  deleteAllStudentNeisNotes,
   getAllStudentNeisNotes,
   getAllStudents,
   getStudentPapsRecords
@@ -141,30 +144,17 @@ export const NeisTab: React.FC<NeisTabProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [allNeisMap, setAllNeisMap] = useState<Record<string, string>>({});
 
-  // 1. 학생 변경 시 저장된 세특 불러오기
+  // 1. 학생 변경 시 저장된 세특 불러오기 (저장된 내용이 없으면 빈 에디터로 시작)
   useEffect(() => {
     const saved = getStudentNeisNote(studentId);
-    if (saved) {
+    if (saved && saved.trim()) {
       setCustomText(saved);
       setIsSaved(true);
     } else {
-      // 저장된 세특이 없으면 기본 추천 문구 1번으로 자동 세팅
-      if (latestPaps) {
-        const rec = generateNEISRecommendation(
-          studentName,
-          latestPaps,
-          fittPlan?.selfAnalysis,
-          completedLessonsCount
-        );
-        setCustomText(rec.summary);
-      } else {
-        setCustomText(
-          `2022 개정 교육과정 '체력 증진의 특성과 원리' 단원에서 신안해양과학고 맞춤형 체력 관리 프로그램에 적극적으로 참여함. 체계적인 신체 진단과 FITT 운동 처방(운동빈도, 강도, 시간, 형태)에 따른 개인 맞춤형 운동 계획을 수립하고, 수업 중 안전 수칙을 준수하며 능동적으로 건강한 체력 증진을 실천함.`
-        );
-      }
+      setCustomText('');
       setIsSaved(false);
     }
-  }, [studentId, latestPaps, studentName, fittPlan, completedLessonsCount]);
+  }, [studentId]);
 
   // 교사용 전체 세특 맵 갱신
   useEffect(() => {
@@ -323,15 +313,41 @@ export const NeisTab: React.FC<NeisTabProps> = ({
     showToast(`[체육교사 승인] ${student.name} 학생의 생활기록부 세특이 안전하게 저장되었습니다!`);
   };
 
-  // 초기화 핸들러
+  // 내용 초기화 / 비우기 핸들러
   const handleReset = () => {
-    if (window.confirm('입력한 내용을 비우고 기본 추천 문구로 재설정하시겠습니까?')) {
-      if (recommendationOptions.length > 0) {
-        setCustomText(recommendationOptions[0].text);
-      } else {
-        setCustomText('');
-      }
+    setCustomText('');
+    setIsSaved(false);
+    showToast('에디터 내용이 비워졌습니다.');
+  };
+
+  // 현재 학생 세특 내용 전체 삭제 핸들러
+  const handleDeleteCurrentNeis = async () => {
+    if (!student) return;
+    if (window.confirm(`정말로 [${student.name}] 학생의 생활기록부 세특 내용을 모두 삭제하시겠습니까?\n저장된 DB 데이터도 함께 삭제됩니다.`)) {
+      setCustomText('');
       setIsSaved(false);
+      await deleteStudentNeisNote(studentId);
+      setAllNeisMap((prev) => {
+        const next = { ...prev };
+        delete next[studentId];
+        return next;
+      });
+      showToast(`${student.name} 학생의 생활기록부 세특 내용이 완전히 삭제되었습니다.`);
+    }
+  };
+
+  // 전교생 세특 내용 전체 일괄 삭제 핸들러 (체육교사 전용)
+  const handleDeleteAllNeis = async () => {
+    if (!isTeacher) {
+      showToast('⚠️ 전교생 세특 삭제는 체육교사 권한이 필요합니다.');
+      return;
+    }
+    if (window.confirm('⚠️ [경고] 신안해양과학고 1학년 전교생(37명)의 생활기록부 세특 내용을 모두 영구 삭제하시겠습니까?\n삭제된 내용은 복구할 수 없습니다.')) {
+      await deleteAllStudentNeisNotes();
+      setCustomText('');
+      setIsSaved(false);
+      setAllNeisMap({});
+      showToast('신안해양과학고 1학년 전교생의 세특 내용이 모두 삭제되었습니다.');
     }
   };
 
@@ -635,6 +651,20 @@ export const NeisTab: React.FC<NeisTabProps> = ({
 
             {/* Textarea */}
             <div className="relative">
+              {!customText && (
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-[11px] text-slate-400">현재 입력된 세특 내용이 없습니다.</span>
+                  {recommendationOptions.length > 0 && (
+                    <button
+                      onClick={() => handleLoadToEditor(recommendationOptions[0].text)}
+                      className="px-2.5 py-1 rounded-xl bg-[#142245] hover:bg-[#1c2e5a] text-[#E8FD3B] border border-[#E8FD3B]/30 text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
+                    >
+                      <Sparkles className="w-3 h-3" />
+                      <span>추천 문구 1번으로 채우기</span>
+                    </button>
+                  )}
+                </div>
+              )}
               <textarea
                 value={customText}
                 onChange={(e) => {
@@ -642,7 +672,7 @@ export const NeisTab: React.FC<NeisTabProps> = ({
                   setIsSaved(false);
                 }}
                 rows={10}
-                placeholder="학생의 체육 수업 참여 태도, PAPS 실측 성취도, FITT 5차시 실천 역량을 직접 수동으로 입력하거나 위의 추천 문구를 수정하세요..."
+                placeholder="학생의 체육 수업 참여 태도, PAPS 실측 성취도, FITT 5차시 실천 역량을 직접 수동으로 입력하거나 왼쪽의 추천 문구를 선택하세요..."
                 className="w-full bg-[#070e1e] border border-[#1e2f5b] focus:border-[#E8FD3B] rounded-2xl p-4 text-sm text-white placeholder:text-slate-500 outline-none leading-relaxed resize-y font-sans transition"
               />
             </div>
@@ -688,13 +718,25 @@ export const NeisTab: React.FC<NeisTabProps> = ({
 
             {/* Action Buttons */}
             <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-              <button
-                onClick={handleReset}
-                className="px-4 py-2.5 rounded-2xl bg-[#070e1e] hover:bg-[#142245] text-slate-400 hover:text-white border border-[#1e2f5b] text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>내용 초기화</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleReset}
+                  className="px-3.5 py-2.5 rounded-2xl bg-[#070e1e] hover:bg-[#142245] text-slate-400 hover:text-white border border-[#1e2f5b] text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+                  title="에디터 입력창의 텍스트를 비웁니다"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>내용 비우기</span>
+                </button>
+
+                <button
+                  onClick={handleDeleteCurrentNeis}
+                  className="px-3.5 py-2.5 rounded-2xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 border border-rose-500/30 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+                  title="현재 학생의 세특 내용을 완전히 삭제하고 저장된 기록을 초기화합니다"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                  <span>세특 전체 삭제</span>
+                </button>
+              </div>
 
               <div className="flex items-center gap-2">
                 <button
@@ -769,6 +811,15 @@ export const NeisTab: React.FC<NeisTabProps> = ({
               >
                 <Copy className="w-3.5 h-3.5 text-[#E8FD3B]" />
                 <span>37명 전체 일괄 복사</span>
+              </button>
+
+              <button
+                onClick={handleDeleteAllNeis}
+                className="px-4 py-2 rounded-2xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+                title="37명 전원의 생활기록부 세특 내용을 완전히 삭제합니다"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                <span>37명 세특 일괄 삭제</span>
               </button>
             </div>
           </div>

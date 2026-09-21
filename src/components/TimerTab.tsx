@@ -14,10 +14,13 @@ import {
   BookOpen,
   Sparkles,
   Timer,
-  X
+  X,
+  Plus,
+  Trash2
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { StudentProfile, WorkoutLog, LessonPlan, FITTPlan } from '../types';
+import { EXERCISE_GUIDES } from '../data/exerciseGuides';
 import {
   playCountdownTick,
   playWorkStartBeep,
@@ -31,6 +34,37 @@ import {
   getStudentLessonPlans,
   getStudentFittPlan
 } from '../services/storageService';
+
+export interface PlannedSetItem {
+  setNumber: number;
+  exerciseName: string;
+  category: string;
+  targetReps?: number;
+}
+
+// 텍스트(예: '15~20회 × 3~4세트')에서 목표 횟수와 세트 수를 추출하는 헬퍼
+export function parseExerciseRepsAndSets(str: string | undefined): { reps: number; sets: number } {
+  if (!str) return { reps: 15, sets: 4 };
+
+  const setMatch = str.match(/(\d+)(?:[~-](\d+))?\s*세트/);
+  let sets = 4;
+  if (setMatch) {
+    sets = setMatch[2] ? parseInt(setMatch[2], 10) : parseInt(setMatch[1], 10);
+  }
+
+  const repMatch = str.match(/(\d+)(?:[~-](\d+))?\s*회/);
+  let reps = 15;
+  if (repMatch) {
+    reps = repMatch[1] ? parseInt(repMatch[1], 10) : 15;
+  } else {
+    const secMatch = str.match(/(\d+)\s*초/);
+    if (secMatch) {
+      reps = parseInt(secMatch[1], 10);
+    }
+  }
+
+  return { reps: Math.max(1, reps), sets: Math.max(1, Math.min(30, sets)) };
+}
 
 interface TimerTabProps {
   student: StudentProfile | null;
@@ -53,8 +87,8 @@ export const TimerTab: React.FC<TimerTabProps> = ({
   fittPlan: propFittPlan,
   lessonPlans = [],
   appliedLessonPlan,
-  initialExerciseName = '20m 셔틀런 인터벌 트레이닝',
-  initialCategory = '심폐지구력',
+  initialExerciseName = '정자세 맨몸 스쿼트',
+  initialCategory = '근력 및 근지구력',
   onWorkoutLogged,
   onOpenAuth,
   isTeacher = false,
@@ -62,12 +96,28 @@ export const TimerTab: React.FC<TimerTabProps> = ({
 }) => {
   const [timerMode, setTimerMode] = useState<TimerMode>('interval');
 
+  // Planned workout sets sequence: 각 세트별 실습종목명, 체력분류, 목표횟수 관리
+  const [plannedSets, setPlannedSets] = useState<PlannedSetItem[]>(() => {
+    const guide = EXERCISE_GUIDES.find(
+      (g) => g.name.toLowerCase() === initialExerciseName.toLowerCase()
+    );
+    const parsed = parseExerciseRepsAndSets(guide?.recommendedSets);
+    const sets = parsed.sets || 4;
+    const reps = parsed.reps || 15;
+    return Array.from({ length: sets }, (_, i) => ({
+      setNumber: i + 1,
+      exerciseName: initialExerciseName,
+      category: initialCategory || guide?.category || '근력 및 근지구력',
+      targetReps: reps
+    }));
+  });
+
   // Interval Settings
   const [prepTime, setPrepTime] = useState<number>(5); // 5s
   const [workTime, setWorkTime] = useState<number>(40); // 40s
   const [restTime, setRestTime] = useState<number>(20); // 20s
-  const [totalSets, setTotalSets] = useState<number>(8); // 8 exercises
-  const [targetReps, setTargetReps] = useState<number>(15); // Target reps per set
+  const [totalSets, setTotalSets] = useState<number>(() => (plannedSets.length > 0 ? plannedSets.length : 4));
+  const [targetReps, setTargetReps] = useState<number>(() => plannedSets[0]?.targetReps || 15);
   const [reps, setReps] = useState<number>(0); // Current accumulated repetitions
 
   // Interval Running State
@@ -92,10 +142,10 @@ export const TimerTab: React.FC<TimerTabProps> = ({
   const [exerciseName, setExerciseName] = useState<string>(initialExerciseName);
   const [category, setCategory] = useState<string>(initialCategory);
   const [rpe, setRpe] = useState<number>(7);
-  const [memo, setMemo] = useState<string>('8개 본운동 인터벌 서킷 완주');
+  const [memo, setMemo] = useState<string>(`${initialExerciseName} 실습`);
   const [showLogModal, setShowLogModal] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
-  const [presetTab, setPresetTab] = useState<'lessons' | 'standards'>('lessons');
+  const [presetTab, setPresetTab] = useState<'lessons' | 'standards'>('standards');
 
   const timerRef = useRef<number | null>(null);
   const stopwatchRef = useRef<number | null>(null);
@@ -108,6 +158,69 @@ export const TimerTab: React.FC<TimerTabProps> = ({
       ? getStudentLessonPlans(student.id)
       : DEFAULT_LESSON_PLANS;
 
+  // initialExerciseName 변경 시 가이드에 맞춰 세트수 및 목표횟수 자동 동기화
+  useEffect(() => {
+    if (initialExerciseName) {
+      const guide = EXERCISE_GUIDES.find(
+        (g) => g.name.toLowerCase() === initialExerciseName.toLowerCase()
+      );
+      const parsed = parseExerciseRepsAndSets(guide?.recommendedSets);
+      const cat = initialCategory || guide?.category || '근력 및 근지구력';
+
+      setExerciseName(initialExerciseName);
+      setCategory(cat);
+      setTotalSets(parsed.sets);
+      setTargetReps(parsed.reps);
+
+      const newSets: PlannedSetItem[] = Array.from({ length: parsed.sets }, (_, i) => ({
+        setNumber: i + 1,
+        exerciseName: initialExerciseName,
+        category: cat,
+        targetReps: parsed.reps
+      }));
+      setPlannedSets(newSets);
+      setMemo(`${initialExerciseName} (${parsed.sets}세트 맞춤 실습)`);
+    }
+  }, [initialExerciseName, initialCategory]);
+
+  // 개별 운동 단일 종목 집중 실습 (예: 정자세 스쿼트 15~20회 3~4세트 집중)
+  const applySingleExercisePlan = (
+    name: string,
+    cat: string,
+    durationOrReps?: string,
+    wSec: number = 40,
+    rSec: number = 20,
+    lessonTitle?: string
+  ) => {
+    const parsed = parseExerciseRepsAndSets(durationOrReps);
+    setIsRunning(false);
+    setCurrentPhase('idle');
+    setActiveLessonPlan(null);
+    setWorkTime(wSec);
+    setRestTime(rSec);
+    setTotalSets(parsed.sets);
+    setTimeLeft(prepTime);
+    setCurrentSet(1);
+    setReps(0);
+    setExerciseName(name);
+    setCategory(cat);
+    setTargetReps(parsed.reps);
+    setMemo(
+      lessonTitle
+        ? `${lessonTitle} - ${name} (${parsed.sets}세트 계획 완주)`
+        : `${name} (${parsed.sets}세트 계획 완주)`
+    );
+
+    // 계획된 세트수만큼 동일 종목으로 채워 타이머가 중간에 엉뚱한 다음 운동으로 넘어가지 않도록 설정
+    const newSets: PlannedSetItem[] = Array.from({ length: parsed.sets }, (_, i) => ({
+      setNumber: i + 1,
+      exerciseName: name,
+      category: cat,
+      targetReps: parsed.reps
+    }));
+    setPlannedSets(newSets);
+  };
+
   // 학생이 작성한 차시 계획서(8개 본운동 + 운동/휴식시간 + 반복횟수) 전체를 타이머에 완전 연동
   const applyFullLessonPlan = (plan: LessonPlan) => {
     setIsRunning(false);
@@ -116,7 +229,8 @@ export const TimerTab: React.FC<TimerTabProps> = ({
 
     const wTime = plan.workTimeSeconds || 40;
     const rTime = plan.restTimeSeconds || 20;
-    const sets = plan.mainExercises?.length || plan.setsCount || 8;
+    const exercises = plan.mainExercises || [];
+    const sets = exercises.length > 0 ? exercises.length : (plan.setsCount || 8);
 
     setWorkTime(wTime);
     setRestTime(rTime);
@@ -125,20 +239,32 @@ export const TimerTab: React.FC<TimerTabProps> = ({
     setCurrentSet(1);
     setReps(0);
 
-    const firstEx = plan.mainExercises?.[0];
-    const initialName = firstEx?.name || plan.title;
-    const initialCat = firstEx?.category || plan.targetFactor || '맞춤형 체력';
+    const newSets: PlannedSetItem[] = exercises.length > 0
+      ? exercises.map((ex, idx) => {
+          const parsed = parseExerciseRepsAndSets(ex.durationOrReps);
+          return {
+            setNumber: idx + 1,
+            exerciseName: ex.name,
+            category: ex.category || plan.targetFactor || '맞춤형 체력',
+            targetReps: parsed.reps
+          };
+        })
+      : Array.from({ length: sets }, (_, i) => ({
+          setNumber: i + 1,
+          exerciseName: plan.title,
+          category: plan.targetFactor || '맞춤형 체력',
+          targetReps: 15
+        }));
 
-    let initialReps = 15;
-    if (firstEx?.durationOrReps) {
-      const match = firstEx.durationOrReps.match(/(\d+)/);
-      if (match) initialReps = parseInt(match[1], 10);
+    setPlannedSets(newSets);
+
+    const first = newSets[0];
+    if (first) {
+      setExerciseName(first.exerciseName);
+      setCategory(first.category);
+      setTargetReps(first.targetReps || 15);
+      setMemo(`${plan.title} 8개 본운동 순환 실습 [1세트: ${first.exerciseName}]`);
     }
-
-    setTargetReps(initialReps);
-    setExerciseName(initialName);
-    setCategory(initialCat);
-    setMemo(`${plan.title} 8개 본운동 실습 [1세트: ${initialName}]`);
   };
 
   // 학생이 작성한 FITT 운동 처방 계획 기반 타이머 자동 설정
@@ -164,19 +290,19 @@ export const TimerTab: React.FC<TimerTabProps> = ({
     } else if (typeStr.includes('스쿼트') || typeStr.includes('푸시업') || typeStr.includes('근력') || typeStr.includes('악력')) {
       wTime = 40;
       rTime = 20;
-      sets = 6;
+      sets = 4;
       autoReps = 15;
       autoCategory = '근력 및 근지구력';
     } else if (typeStr.includes('스트레칭') || typeStr.includes('유연성') || typeStr.includes('좌전굴')) {
       wTime = 30;
       rTime = 10;
-      sets = 6;
+      sets = 4;
       autoReps = 5;
       autoCategory = '유연성';
-    } else if (typeStr.includes('점프') || typeStr.includes('제자리') || typeStr.includes('순발력')) {
+    } else if (typeStr.includes('점프') || typeStr.includes('제자리') || typeStr.includes('순발력') || typeStr.includes('버피')) {
       wTime = 20;
       rTime = 15;
-      sets = 6;
+      sets = 4;
       autoReps = 10;
       autoCategory = '순발력';
     }
@@ -191,6 +317,14 @@ export const TimerTab: React.FC<TimerTabProps> = ({
     setExerciseName(autoName);
     setCategory(autoCategory);
     setMemo(`FITT 처방 실습: ${fp.goalStatement || autoName}`);
+
+    const newSets: PlannedSetItem[] = Array.from({ length: sets }, (_, i) => ({
+      setNumber: i + 1,
+      exerciseName: autoName,
+      category: autoCategory,
+      targetReps: autoReps
+    }));
+    setPlannedSets(newSets);
   };
 
   // FITT 탭에서 인터벌 연동 요청 시 자동 세팅
@@ -200,33 +334,31 @@ export const TimerTab: React.FC<TimerTabProps> = ({
     }
   }, [appliedLessonPlan]);
 
-  // 현재 진행 세트에 따른 본운동 슬롯 및 다음 본운동 추출
-  const currentExerciseItem =
-    activeLessonPlan && activeLessonPlan.mainExercises && activeLessonPlan.mainExercises.length > 0
-      ? activeLessonPlan.mainExercises[(currentSet - 1) % activeLessonPlan.mainExercises.length]
-      : null;
+  // 현재 진행 세트에 따른 본운동 슬롯 및 다음 본운동 추출 (plannedSets 기반)
+  const currentPlannedSet: PlannedSetItem =
+    plannedSets && plannedSets.length >= currentSet
+      ? plannedSets[currentSet - 1]
+      : { setNumber: currentSet, exerciseName, category, targetReps };
 
-  const nextExerciseItem =
-    activeLessonPlan && activeLessonPlan.mainExercises && activeLessonPlan.mainExercises.length > 0
-      ? activeLessonPlan.mainExercises[currentSet % activeLessonPlan.mainExercises.length]
+  const nextPlannedSet: PlannedSetItem | null =
+    plannedSets && currentSet < totalSets && plannedSets.length > currentSet
+      ? plannedSets[currentSet]
       : null;
 
   // 세트 번호 변경 시 현재 세트의 본운동명 및 세트별 목표 횟수 실시간 동기화
   useEffect(() => {
-    if (activeLessonPlan && currentExerciseItem) {
-      setExerciseName(currentExerciseItem.name);
-      if (currentExerciseItem.category) {
-        setCategory(currentExerciseItem.category);
-      }
-      if (currentExerciseItem.durationOrReps) {
-        const match = currentExerciseItem.durationOrReps.match(/(\d+)/);
-        if (match) {
-          setTargetReps(parseInt(match[1], 10));
+    if (plannedSets && plannedSets.length >= currentSet) {
+      const item = plannedSets[currentSet - 1];
+      if (item) {
+        setExerciseName(item.exerciseName);
+        setCategory(item.category);
+        if (item.targetReps) {
+          setTargetReps(item.targetReps);
         }
+        setMemo(`${item.exerciseName} [${currentSet}/${totalSets}세트]`);
       }
-      setMemo(`${activeLessonPlan.title} [${currentSet}세트: ${currentExerciseItem.name}]`);
     }
-  }, [currentSet, activeLessonPlan]);
+  }, [currentSet, plannedSets, totalSets]);
 
   // Rep Counter Handlers
   const handleAddReps = (delta: number) => {
@@ -244,7 +376,7 @@ export const TimerTab: React.FC<TimerTabProps> = ({
     pSets: number,
     pName: string,
     pCat: string,
-    pTargetReps?: number
+    pTargetReps: number = 15
   ) => {
     setIsRunning(false);
     setCurrentPhase('idle');
@@ -257,10 +389,116 @@ export const TimerTab: React.FC<TimerTabProps> = ({
     setReps(0);
     setExerciseName(pName);
     setCategory(pCat);
-    if (pTargetReps) {
-      setTargetReps(pTargetReps);
+    setTargetReps(pTargetReps);
+    setMemo(`${pName} (${pSets}세트 맞춤 실습)`);
+
+    const newSets: PlannedSetItem[] = Array.from({ length: pSets }, (_, i) => ({
+      setNumber: i + 1,
+      exerciseName: pName,
+      category: pCat,
+      targetReps: pTargetReps
+    }));
+    setPlannedSets(newSets);
+  };
+
+  // 세트 수 변경 시 plannedSets 배열 크기 동기화
+  const handleTotalSetsChange = (newTotal: number) => {
+    const clamped = Math.max(1, Math.min(30, newTotal));
+    setTotalSets(clamped);
+    setPlannedSets((prev) => {
+      if (prev.length === clamped) return prev;
+      if (prev.length < clamped) {
+        const last = prev[prev.length - 1] || {
+          exerciseName,
+          category,
+          targetReps
+        };
+        const added: PlannedSetItem[] = Array.from(
+          { length: clamped - prev.length },
+          (_, i) => ({
+            setNumber: prev.length + i + 1,
+            exerciseName: last.exerciseName,
+            category: last.category,
+            targetReps: last.targetReps || targetReps
+          })
+        );
+        return [...prev, ...added];
+      }
+      return prev.slice(0, clamped);
+    });
+  };
+
+  // 세트 추가
+  const handleAddSet = () => {
+    const nextNum = totalSets + 1;
+    if (nextNum > 30) return;
+    const last = plannedSets[plannedSets.length - 1] || {
+      exerciseName,
+      category,
+      targetReps
+    };
+    setTotalSets(nextNum);
+    setPlannedSets((prev) => [
+      ...prev,
+      {
+        setNumber: nextNum,
+        exerciseName: last.exerciseName,
+        category: last.category,
+        targetReps: last.targetReps || targetReps
+      }
+    ]);
+  };
+
+  // 특정 세트 삭제
+  const handleRemoveSet = (index: number) => {
+    if (totalSets <= 1) return;
+    const newTotal = totalSets - 1;
+    setTotalSets(newTotal);
+    setPlannedSets((prev) => {
+      const filtered = prev.filter((_, idx) => idx !== index);
+      return filtered.map((s, i) => ({ ...s, setNumber: i + 1 }));
+    });
+    if (currentSet > newTotal) {
+      setCurrentSet(newTotal);
     }
-    setMemo(`${pName} 인터벌 실습 완주`);
+  };
+
+  // 특정 세트 내용 수정 (실습종목명, 체력분류, 목표횟수)
+  const handleUpdatePlannedSet = (
+    index: number,
+    field: keyof PlannedSetItem,
+    value: string | number
+  ) => {
+    setPlannedSets((prev) => {
+      const next = [...prev];
+      if (!next[index]) return prev;
+      next[index] = {
+        ...next[index],
+        [field]: value
+      };
+      if (index === currentSet - 1) {
+        if (field === 'exerciseName') setExerciseName(String(value));
+        if (field === 'category') setCategory(String(value));
+        if (field === 'targetReps') setTargetReps(Number(value));
+      }
+      return next;
+    });
+  };
+
+  // 1세트의 실습종목명, 체력분류, 목표횟수를 전체 세트에 일괄 복사 적용
+  const handleApplySet1ToAll = () => {
+    if (plannedSets.length === 0) return;
+    const set1 = plannedSets[0];
+    const updated = plannedSets.map((s) => ({
+      ...s,
+      exerciseName: set1.exerciseName,
+      category: set1.category,
+      targetReps: set1.targetReps
+    }));
+    setPlannedSets(updated);
+    setExerciseName(set1.exerciseName);
+    setCategory(set1.category);
+    if (set1.targetReps) setTargetReps(set1.targetReps);
   };
 
   // Interval Engine: Ref-based state machine ensuring 1, 2, 3, 4 SET sequential progression
@@ -547,7 +785,7 @@ export const TimerTab: React.FC<TimerTabProps> = ({
       {/* 2. Main Timer Display Card */}
       {timerMode === 'interval' ? (
         <div className="rounded-3xl bg-[#0d172e] border border-[#1e2f5b] p-6 sm:p-8 shadow-xl flex flex-col items-center justify-center space-y-5 text-center">
-          {/* Active Workout Plan Banner if configured */}
+          {/* Active Workout Plan Banner or Set Info */}
           {activeLessonPlan ? (
             <div className="w-full max-w-5xl bg-[#142245] border border-[#E8FD3B]/40 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-md">
               <div className="flex items-center gap-3 text-left">
@@ -562,34 +800,29 @@ export const TimerTab: React.FC<TimerTabProps> = ({
                     </span>
                   </div>
                   <div className="text-xs text-slate-200 mt-0.5">
-                    현재 <span className="font-extrabold text-[#E8FD3B] font-mono">{currentSet}</span>세트 실습:{' '}
+                    현재 <span className="font-extrabold text-[#E8FD3B] font-mono">[{currentSet}/{totalSets}세트]</span> 실습:{' '}
                     <span className="font-extrabold text-white underline decoration-[#E8FD3B] underline-offset-4">
-                      {currentExerciseItem?.name || exerciseName}
+                      {currentPlannedSet.exerciseName}
                     </span>
-                    {currentExerciseItem?.targetMuscle && (
-                      <span className="text-slate-400 text-[11px] ml-1.5">
-                        ({currentExerciseItem.targetMuscle})
-                      </span>
-                    )}
+                    <span className="text-[11px] text-sky-300 font-bold ml-1.5 bg-[#0d172e] px-2 py-0.5 rounded-md border border-[#1e2f5b]">
+                      {currentPlannedSet.category}
+                    </span>
                   </div>
                 </div>
               </div>
-
-              {nextExerciseItem && currentSet < totalSets && (
-                <div className="text-[11px] text-slate-300 bg-[#070e1e] px-3 py-1.5 rounded-xl border border-[#1e2f5b] flex items-center gap-1.5 self-stretch sm:self-auto justify-center">
-                  <span className="text-slate-500">다음 순서:</span>
-                  <span className="text-white font-bold">{nextExerciseItem.name}</span>
-                </div>
-              )}
             </div>
           ) : (
-            <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#070e1e] border border-[#1e2f5b] text-xs text-slate-300">
-              <Dumbbell className="w-3.5 h-3.5 text-[#E8FD3B]" />
-              <span>실습 종목:</span>
-              <span className="font-bold text-white">{exerciseName}</span>
-              <span className="text-[10px] text-sky-300 font-bold bg-[#142245] px-2 py-0.5 rounded-full border border-sky-500/20">
-                {category}
-              </span>
+            <div className="flex flex-wrap items-center justify-center gap-2 text-xs">
+              <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#070e1e] border border-[#1e2f5b] text-slate-300">
+                <Dumbbell className="w-3.5 h-3.5 text-[#E8FD3B]" />
+                <span className="text-slate-400">현재 실습:</span>
+                <span className="font-extrabold text-[#E8FD3B]">
+                  [{currentSet}/{totalSets}세트] {currentPlannedSet.exerciseName}
+                </span>
+                <span className="text-[10px] text-sky-300 font-bold bg-[#142245] px-2 py-0.5 rounded-full border border-sky-500/20">
+                  {currentPlannedSet.category}
+                </span>
+              </div>
             </div>
           )}
 
@@ -858,9 +1091,9 @@ export const TimerTab: React.FC<TimerTabProps> = ({
 
       {/* 3. Preset & Interval Configuration Section */}
       {timerMode === 'interval' && (
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
-          {/* Left 3 cols: Interval Presets */}
-          <div className="lg:col-span-3 rounded-3xl bg-[#0d172e] border border-[#1e2f5b] p-6 space-y-4 shadow-xl">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          {/* Left 5 cols: Interval Presets */}
+          <div className="lg:col-span-5 rounded-3xl bg-[#0d172e] border border-[#1e2f5b] p-6 space-y-4 shadow-xl">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#1e2f5b] pb-3">
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-[#E8FD3B]" />
@@ -871,6 +1104,17 @@ export const TimerTab: React.FC<TimerTabProps> = ({
               <div className="flex bg-[#070e1e] p-1 rounded-xl border border-[#1e2f5b]">
                 <button
                   type="button"
+                  onClick={() => setPresetTab('standards')}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    presetTab === 'standards'
+                      ? 'bg-[#E8FD3B] text-black shadow-xs'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  기본 체육 인터벌
+                </button>
+                <button
+                  type="button"
                   onClick={() => setPresetTab('lessons')}
                   className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
                     presetTab === 'lessons'
@@ -878,18 +1122,7 @@ export const TimerTab: React.FC<TimerTabProps> = ({
                       : 'text-slate-400 hover:text-white'
                   }`}
                 >
-                  5차시 맞춤 처방 연동
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPresetTab('standards')}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                    presetTab === 'standards'
-                      ? 'bg-[#142245] text-white'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  기본 체육 인터벌
+                  5차시 처방 연동
                 </button>
               </div>
             </div>
@@ -978,38 +1211,51 @@ export const TimerTab: React.FC<TimerTabProps> = ({
                         <button
                           type="button"
                           onClick={() => applyFullLessonPlan(lp)}
-                          className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition shadow-xs cursor-pointer active:scale-95 ${
+                          className={`px-3 py-1.5 rounded-xl text-xs font-black transition shadow-xs cursor-pointer active:scale-95 flex items-center gap-1.5 ${
                             isCurrentActive
                               ? 'bg-white text-black hover:bg-slate-200'
                               : 'bg-[#E8FD3B] hover:bg-[#d5eb28] text-black'
                           }`}
+                          title="차시별 추천 8개 본운동 전체를 계획된 세트 목록으로 옮겨 타이머에 적용합니다"
                         >
-                          실습 자동 세팅
+                          <span>전체 운동 세트 목록으로 옮기기</span>
                         </button>
                       </div>
 
-                      {/* 8 Main Exercises Sequence Preview */}
+                      {/* 8 Main Exercises Sequence Preview (Clickable for single-exercise plan) */}
                       {lp.mainExercises && lp.mainExercises.length > 0 && (
                         <div className="space-y-1">
                           <span className="text-[10px] font-bold text-slate-400 block">
-                            실습 순환 8개 본운동 계획:
+                            실습 순환 본운동 계획 <span className="text-[#E8FD3B] font-normal">(클릭 시 해당 종목 세트 집중 실습)</span>:
                           </span>
-                          <div className="flex flex-wrap gap-1">
+                          <div className="flex flex-wrap gap-1.5">
                             {lp.mainExercises.map((ex, idx) => (
-                              <span
+                              <button
                                 key={idx}
-                                className={`text-[10px] px-2 py-0.5 rounded-lg border flex items-center gap-1 ${
+                                type="button"
+                                onClick={() =>
+                                  applySingleExercisePlan(
+                                    ex.name,
+                                    ex.category || lp.targetFactor || '근력 및 근지구력',
+                                    ex.durationOrReps,
+                                    wTime,
+                                    rTime,
+                                    lp.title
+                                  )
+                                }
+                                className={`text-[10px] px-2.5 py-1 rounded-lg border flex items-center gap-1 transition cursor-pointer active:scale-95 text-left ${
                                   isCurrentActive && currentSet === idx + 1
                                     ? 'bg-[#E8FD3B] text-black font-black border-[#E8FD3B]'
-                                    : 'bg-[#0d172e] text-slate-300 border-[#1e2f5b]'
+                                    : 'bg-[#0d172e] hover:bg-[#142245] text-slate-200 hover:text-white border-[#1e2f5b] hover:border-[#E8FD3B]/40'
                                 }`}
+                                title={`${ex.name} 계획 세트(예: 3~4세트)로 타이머 세팅`}
                               >
-                                <span className="opacity-60">{idx + 1}.</span>
+                                <span className="opacity-60 font-mono">{idx + 1}.</span>
                                 <span className="font-bold">{ex.name}</span>
                                 {ex.durationOrReps && (
                                   <span className="text-[9px] opacity-80">({ex.durationOrReps})</span>
                                 )}
-                              </span>
+                              </button>
                             ))}
                           </div>
                         </div>
@@ -1032,6 +1278,48 @@ export const TimerTab: React.FC<TimerTabProps> = ({
             ) : (
               /* Sub-view 2: Standard PE Interval Presets */
               <div className="space-y-2.5">
+                {/* 1. 정자세 맨몸 스쿼트 (사용자 요청 핵심 프리셋) */}
+                <button
+                  onClick={() =>
+                    applyPreset(40, 20, 4, '정자세 맨몸 스쿼트', '근력 및 근지구력', 15)
+                  }
+                  className="w-full text-left p-3.5 rounded-2xl bg-gradient-to-r from-[#142245] to-[#070e1e] hover:from-[#1c2e5a] border border-[#E8FD3B]/50 hover:border-[#E8FD3B] transition text-xs flex justify-between items-center group cursor-pointer shadow-md"
+                >
+                  <div>
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <span className="px-1.5 py-0.5 rounded bg-[#E8FD3B] text-black text-[10px] font-black">추천</span>
+                      <span className="font-black text-white text-sm group-hover:text-[#E8FD3B]">
+                        정자세 맨몸 스쿼트 (15~20회 × 4세트)
+                      </span>
+                    </div>
+                    <span className="text-slate-300 text-[11px]">
+                      40초 운동 / 20초 휴식 · <strong className="text-[#E8FD3B]">4세트 집중 실습</strong> (근력 및 근지구력)
+                    </span>
+                  </div>
+                  <span className="text-black font-black bg-[#E8FD3B] hover:bg-[#d5eb28] px-3 py-1.5 rounded-xl shrink-0 shadow-xs">
+                    적용
+                  </span>
+                </button>
+
+                {/* 2. 정석 푸시업 */}
+                <button
+                  onClick={() =>
+                    applyPreset(40, 20, 4, '정석 푸시업 (팔굽혀펴기)', '근력 및 근지구력', 15)
+                  }
+                  className="w-full text-left p-3.5 rounded-2xl bg-[#070e1e] hover:bg-[#142245] border border-[#1e2f5b] hover:border-[#E8FD3B]/40 transition text-xs flex justify-between items-center group cursor-pointer"
+                >
+                  <div>
+                    <span className="font-bold text-white block group-hover:text-[#E8FD3B]">
+                      정석 푸시업 (12~20회 × 4세트)
+                    </span>
+                    <span className="text-slate-400 text-[11px]">40초 운동 / 20초 휴식 · 4세트 (상체 근지구력)</span>
+                  </div>
+                  <span className="text-[#E8FD3B] font-bold bg-[#142245] px-2.5 py-1 rounded-lg border border-[#E8FD3B]/30">
+                    적용
+                  </span>
+                </button>
+
+                {/* 3. 타바타 정석 서킷 */}
                 <button
                   onClick={() =>
                     applyPreset(20, 10, 8, '타바타(Tabata) 전신 서킷', '심폐지구력', 15)
@@ -1042,16 +1330,17 @@ export const TimerTab: React.FC<TimerTabProps> = ({
                     <span className="font-bold text-white block group-hover:text-[#E8FD3B]">
                       타바타 정석 (20초 운동 / 10초 휴식)
                     </span>
-                    <span className="text-slate-400 text-[11px]">8세트 (총 4분 고강도 인터벌)</span>
+                    <span className="text-slate-400 text-[11px]">8세트 (총 4분 고강도 인터벌 심폐 서킷)</span>
                   </div>
-                  <span className="text-black font-bold bg-[#E8FD3B] px-2.5 py-1 rounded-lg">
+                  <span className="text-slate-200 font-bold bg-[#142245] px-2.5 py-1 rounded-lg border border-[#1e2f5b]">
                     적용
                   </span>
                 </button>
 
+                {/* 4. 셔틀런 지구력 */}
                 <button
                   onClick={() =>
-                    applyPreset(120, 60, 4, '20m 셔틀런 심폐 인터벌', '심폐지구력', 20)
+                    applyPreset(120, 60, 4, '20m 왕복오래달리기(셔틀런)', '심폐지구력', 20)
                   }
                   className="w-full text-left p-3.5 rounded-2xl bg-[#070e1e] hover:bg-[#142245] border border-[#1e2f5b] hover:border-sky-400 transition text-xs flex justify-between items-center group cursor-pointer"
                 >
@@ -1059,33 +1348,35 @@ export const TimerTab: React.FC<TimerTabProps> = ({
                     <span className="font-bold text-white block group-hover:text-sky-400">
                       셔틀런 지구력 (2분 달리기 / 1분 휴식)
                     </span>
-                    <span className="text-slate-400 text-[11px]">4세트 (심폐지구력 특화)</span>
+                    <span className="text-slate-400 text-[11px]">4세트 (심폐지구력 특화 셔틀런)</span>
                   </div>
                   <span className="text-sky-300 font-bold bg-sky-950/60 px-2.5 py-1 rounded-lg border border-sky-800/60">
                     적용
                   </span>
                 </button>
 
+                {/* 5. 버피 테스트 점프 */}
                 <button
                   onClick={() =>
-                    applyPreset(30, 15, 6, '맨몸 근력 서킷 (푸시업·스쿼트)', '근력 및 근지구력', 15)
+                    applyPreset(30, 15, 3, '버피 테스트 점프', '순발력', 12)
                   }
                   className="w-full text-left p-3.5 rounded-2xl bg-[#070e1e] hover:bg-[#142245] border border-[#1e2f5b] hover:border-[#E8FD3B] transition text-xs flex justify-between items-center group cursor-pointer"
                 >
                   <div>
                     <span className="font-bold text-white block group-hover:text-[#E8FD3B]">
-                      근력 서킷 (30초 운동 / 15초 휴식)
+                      버피 테스트 점프 (10~15회 × 3세트)
                     </span>
-                    <span className="text-slate-400 text-[11px]">6세트 (대근육 강화)</span>
+                    <span className="text-slate-400 text-[11px]">30초 운동 / 15초 휴식 · 3세트 (순발력 및 민첩성)</span>
                   </div>
                   <span className="text-[#E8FD3B] font-bold bg-[#142245] px-2.5 py-1 rounded-lg border border-[#E8FD3B]/30">
                     적용
                   </span>
                 </button>
 
+                {/* 6. 유연성 정적 스트레칭 */}
                 <button
                   onClick={() =>
-                    applyPreset(30, 10, 5, '유연성 정적 스트레칭', '유연성', 5)
+                    applyPreset(30, 10, 4, '유연성 정적 스트레칭', '유연성', 5)
                   }
                   className="w-full text-left p-3.5 rounded-2xl bg-[#070e1e] hover:bg-[#142245] border border-[#1e2f5b] hover:border-amber-400 transition text-xs flex justify-between items-center group cursor-pointer"
                 >
@@ -1093,7 +1384,7 @@ export const TimerTab: React.FC<TimerTabProps> = ({
                     <span className="font-bold text-white block group-hover:text-amber-400">
                       스트레칭 유지 (30초 정적 자세 / 10초 이완)
                     </span>
-                    <span className="text-slate-400 text-[11px]">5세트 (관절 가동성 증진)</span>
+                    <span className="text-slate-400 text-[11px]">4세트 (좌전굴/이상근 관절 가동성 증진)</span>
                   </div>
                   <span className="text-amber-300 font-bold bg-amber-950/60 px-2.5 py-1 rounded-lg border border-amber-800/60">
                     적용
@@ -1103,13 +1394,19 @@ export const TimerTab: React.FC<TimerTabProps> = ({
             )}
           </div>
 
-          {/* Right 2 cols: Custom Setting Inputs */}
-          <div className="lg:col-span-2 rounded-3xl bg-[#0d172e] border border-[#1e2f5b] p-6 space-y-4 shadow-xl">
-            <h3 className="text-sm font-bold text-white flex items-center gap-2">
-              <Settings2 className="w-4 h-4 text-[#E8FD3B]" />
-              맞춤형 시간, 세트 및 목표 횟수 설정
-            </h3>
+          {/* Right 7 cols: Custom Setting Inputs & Full Planned Sets Sequence */}
+          <div className="lg:col-span-7 rounded-3xl bg-[#0d172e] border border-[#1e2f5b] p-6 space-y-4 shadow-xl">
+            <div className="flex items-center justify-between pb-2 border-b border-[#1e2f5b]">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <Settings2 className="w-4 h-4 text-[#E8FD3B]" />
+                맞춤형 시간, 세트 및 목표 횟수 설정
+              </h3>
+              <span className="text-xs text-slate-400">
+                총 실습 세트: <strong className="text-[#E8FD3B] font-mono">{totalSets}</strong>세트
+              </span>
+            </div>
 
+            {/* Base Time & Set Inputs */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
               <div className="p-3 bg-[#070e1e] rounded-2xl border border-[#1e2f5b]">
                 <label className="text-[11px] font-bold text-amber-400 block mb-1">
@@ -1170,14 +1467,14 @@ export const TimerTab: React.FC<TimerTabProps> = ({
                   max={30}
                   value={totalSets}
                   disabled={isRunning}
-                  onChange={(e) => setTotalSets(Number(e.target.value))}
+                  onChange={(e) => handleTotalSetsChange(Number(e.target.value))}
                   className="w-full bg-[#0d172e] border border-[#1e2f5b] rounded-xl px-2.5 py-1.5 text-xs text-white font-bold focus:outline-none focus:border-[#E8FD3B]"
                 />
               </div>
 
               <div className="p-3 bg-[#070e1e] rounded-2xl border border-[#1e2f5b] col-span-2 sm:col-span-1">
                 <label className="text-[11px] font-bold text-[#E8FD3B] block mb-1">
-                  목표 횟수
+                  기본 목표 횟수
                 </label>
                 <input
                   type="number"
@@ -1191,30 +1488,159 @@ export const TimerTab: React.FC<TimerTabProps> = ({
               </div>
             </div>
 
-            {/* Exercise Subject Custom Name */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-              <div>
-                <label className="block text-[11px] font-bold text-slate-400 mb-1">실습 종목명</label>
-                <input
-                  type="text"
-                  value={exerciseName}
-                  onChange={(e) => setExerciseName(e.target.value)}
-                  className="w-full bg-[#070e1e] border border-[#1e2f5b] focus:border-[#E8FD3B] rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
-                />
+            {/* Planned Sets Full Table / Cards */}
+            <div className="space-y-3 pt-3 border-t border-[#1e2f5b]">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h4 className="text-xs font-black text-white flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-[#E8FD3B]" />
+                    <span>계획된 전체 운동 세트 목록 (총 {totalSets}세트)</span>
+                  </h4>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    모든 세트의 실습종목명과 체력분류를 개별 설정하거나 1세트 내용을 일괄 복사할 수 있습니다.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-1.5 self-start sm:self-auto shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleApplySet1ToAll}
+                    className="px-2.5 py-1.5 rounded-xl bg-[#142245] hover:bg-[#1c2e5a] text-[#E8FD3B] border border-[#E8FD3B]/30 text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
+                    title="1세트의 실습종목명, 체력분류, 목표횟수를 모든 세트에 동일하게 복사 적용합니다"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    <span>1세트 일괄 복사</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleAddSet}
+                    disabled={totalSets >= 30}
+                    className="px-2.5 py-1.5 rounded-xl bg-[#070e1e] hover:bg-[#142245] text-slate-200 border border-[#1e2f5b] text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
+                  >
+                    <Plus className="w-3 h-3 text-[#E8FD3B]" />
+                    <span>세트 추가</span>
+                  </button>
+                </div>
               </div>
-              <div>
-                <label className="block text-[11px] font-bold text-slate-400 mb-1">체력 분류 카테고리</label>
-                <select
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  className="w-full bg-[#070e1e] border border-[#1e2f5b] focus:border-[#E8FD3B] rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
-                >
-                  <option value="심폐지구력">심폐지구력</option>
-                  <option value="근력 및 근지구력">근력 및 근지구력</option>
-                  <option value="순발력">순발력</option>
-                  <option value="유연성">유연성</option>
-                  <option value="종합서킷">종합서킷</option>
-                </select>
+
+              {/* Scrollable Set List */}
+              <div className="max-h-96 overflow-y-auto space-y-2.5 pr-1">
+                {plannedSets.map((item, idx) => {
+                  const isCurrentActive = currentSet === idx + 1;
+                  return (
+                    <div
+                      key={idx}
+                      className={`p-3 rounded-2xl border transition ${
+                        isCurrentActive
+                          ? 'bg-[#142245] border-[#E8FD3B] shadow-[0_0_12px_rgba(232,253,59,0.15)]'
+                          : 'bg-[#070e1e] border-[#1e2f5b] hover:border-[#1e2f5b]/80'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`w-6 h-6 rounded-lg text-xs font-black flex items-center justify-center ${
+                              isCurrentActive
+                                ? 'bg-[#E8FD3B] text-black'
+                                : 'bg-[#142245] text-slate-200 border border-[#1e2f5b]'
+                            }`}
+                          >
+                            {idx + 1}
+                          </span>
+                          <span className="text-xs font-extrabold text-white">
+                            {idx + 1}세트
+                          </span>
+                          {isCurrentActive && (
+                            <span className="text-[10px] bg-[#E8FD3B]/20 text-[#E8FD3B] font-black px-2 py-0.5 rounded-md border border-[#E8FD3B]/40 animate-pulse">
+                              진행 중
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          {/* Quick Exercise Preset Selector */}
+                          <select
+                            onChange={(e) => {
+                              if (!e.target.value) return;
+                              const [selName, selCat, selReps] = e.target.value.split('|');
+                              handleUpdatePlannedSet(idx, 'exerciseName', selName);
+                              if (selCat) handleUpdatePlannedSet(idx, 'category', selCat);
+                              if (selReps) handleUpdatePlannedSet(idx, 'targetReps', Number(selReps));
+                            }}
+                            value=""
+                            className="bg-[#0d172e] border border-[#1e2f5b] hover:border-[#E8FD3B]/40 rounded-lg px-2 py-1 text-[11px] text-[#E8FD3B] font-bold cursor-pointer focus:outline-none"
+                          >
+                            <option value="">종목 빠른 선택 ▼</option>
+                            <option value="정자세 맨몸 스쿼트|근력 및 근지구력|15">정자세 스쿼트 (하체)</option>
+                            <option value="정석 푸시업 (팔굽혀펴기)|근력 및 근지구력|15">정석 푸시업 (상체)</option>
+                            <option value="20m 왕복오래달리기(셔틀런)|심폐지구력|20">20m 셔틀런 (심폐)</option>
+                            <option value="버피 테스트 점프|순발력|12">버피 점프 (순발력)</option>
+                            <option value="정석 코어 플랭크|근력 및 근지구력|40">코어 플랭크 (코어)</option>
+                            <option value="워킹 런지 (하체 교차)|근력 및 근지구력|16">워킹 런지 (하체)</option>
+                            <option value="좌전굴 유연성 스트레칭|유연성|5">좌전굴 스트레칭 (유연성)</option>
+                            <option value="제자리 무릎당겨 점프|순발력|15">무릎당겨 점프 (순발력)</option>
+                            <option value="마운틴 클라이머|심폐지구력|20">마운틴 클라이머 (전신)</option>
+                          </select>
+
+                          {totalSets > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveSet(idx)}
+                              className="w-6 h-6 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 flex items-center justify-center transition cursor-pointer"
+                              title="이 세트 삭제"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                        <div className="sm:col-span-5">
+                          <label className="block text-[10px] font-bold text-slate-400 mb-0.5">실습 종목명</label>
+                          <input
+                            type="text"
+                            value={item.exerciseName}
+                            onChange={(e) => handleUpdatePlannedSet(idx, 'exerciseName', e.target.value)}
+                            placeholder="예: 정자세 맨몸 스쿼트"
+                            className="w-full bg-[#0d172e] border border-[#1e2f5b] focus:border-[#E8FD3B] rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none font-medium"
+                          />
+                        </div>
+
+                        <div className="sm:col-span-4">
+                          <label className="block text-[10px] font-bold text-slate-400 mb-0.5">체력분류 카테고리</label>
+                          <select
+                            value={item.category}
+                            onChange={(e) => handleUpdatePlannedSet(idx, 'category', e.target.value)}
+                            className="w-full bg-[#0d172e] border border-[#1e2f5b] focus:border-[#E8FD3B] rounded-xl px-2 py-1.5 text-xs text-white focus:outline-none"
+                          >
+                            <option value="근력 및 근지구력">근력 및 근지구력</option>
+                            <option value="심폐지구력">심폐지구력</option>
+                            <option value="순발력">순발력</option>
+                            <option value="유연성">유연성</option>
+                            <option value="종합서킷">종합서킷</option>
+                          </select>
+                        </div>
+
+                        <div className="sm:col-span-3">
+                          <label className="block text-[10px] font-bold text-slate-400 mb-0.5">목표 횟수/시간</label>
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              min={1}
+                              max={200}
+                              value={item.targetReps || targetReps}
+                              onChange={(e) => handleUpdatePlannedSet(idx, 'targetReps', Math.max(1, Number(e.target.value)))}
+                              className="w-full bg-[#0d172e] border border-[#1e2f5b] focus:border-[#E8FD3B] rounded-xl px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none"
+                            />
+                            <span className="text-[11px] text-slate-400 shrink-0">회</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>

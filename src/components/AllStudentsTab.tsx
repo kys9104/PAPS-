@@ -59,7 +59,7 @@ interface AllStudentsTabProps {
   onOpenTeacherLogin: () => void;
   onSelectStudent: (student: StudentProfile) => void;
   onNavigateTab: (
-    tab: 'dashboard' | 'fitt' | 'paps' | 'exercises' | 'timer' | 'neis' | 'all-students'
+    tab: 'dashboard' | 'fitt' | 'paps' | 'exercises' | 'timer' | 'all-students'
   ) => void;
 }
 
@@ -1065,7 +1065,7 @@ export const AllStudentsTab: React.FC<AllStudentsTabProps> = ({
           onOpenTeacherLogin={onOpenTeacherLogin}
           onNavigateNeis={() => {
             onSelectStudent(viewingStudent);
-            onNavigateTab('neis');
+            onNavigateTab('dashboard');
             setViewingStudent(null);
           }}
         />
@@ -1610,9 +1610,9 @@ const ViewDetailModal: React.FC<ViewDetailModalProps> = ({
           <div className="flex items-center justify-end gap-2 pt-1">
             <button
               onClick={onNavigateNeis}
-              className="px-4 py-2 rounded-xl bg-[#142245] hover:bg-[#1e3264] text-slate-200 border border-[#1e2f5b] text-xs font-bold transition cursor-pointer"
+              className="px-4 py-2 rounded-xl bg-[#142245] hover:bg-[#1e3264] text-[#E8FD3B] border border-[#E8FD3B]/30 text-xs font-bold transition cursor-pointer"
             >
-              세특 생성기로 이동
+              학생 기록실 열람
             </button>
             <button
               onClick={onClose}

@@ -690,12 +690,53 @@ export function getStudentNeisNote(studentId: string): string | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.STUDENT_NEIS_NOTES);
     const allNotes: Record<string, string> = raw ? JSON.parse(raw) : {};
-    if (allNotes[studentId]) return allNotes[studentId];
+    if (allNotes[studentId] !== undefined) return allNotes[studentId];
   } catch {
     // ignore
   }
-  const paps = getStudentPapsRecords(studentId);
-  return paps[0]?.neisNote || null;
+  return null;
+}
+
+export async function deleteStudentNeisNote(studentId: string): Promise<void> {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.STUDENT_NEIS_NOTES);
+    const allNotes: Record<string, string> = raw ? JSON.parse(raw) : {};
+    delete allNotes[studentId];
+    localStorage.setItem(STORAGE_KEYS.STUDENT_NEIS_NOTES, JSON.stringify(allNotes));
+
+    const records = getStudentPapsRecords(studentId);
+    if (records.length > 0) {
+      const latest = { ...records[0], neisNote: '' };
+      await savePapsRecord(latest);
+    }
+
+    const db = getFirebaseFirestore();
+    if (db) {
+      try {
+        await deleteDoc(doc(db, 'neis_notes', studentId));
+      } catch (e) {
+        console.warn('Firebase neis note delete warning:', e);
+      }
+    }
+  } catch (err) {
+    console.error('Failed to delete student NEIS note:', err);
+  }
+}
+
+export async function deleteAllStudentNeisNotes(): Promise<void> {
+  try {
+    localStorage.removeItem(STORAGE_KEYS.STUDENT_NEIS_NOTES);
+    const rawPaps = localStorage.getItem(STORAGE_KEYS.PAPS_RECORDS);
+    if (rawPaps) {
+      const records = JSON.parse(rawPaps);
+      if (Array.isArray(records)) {
+        const cleaned = records.map((r) => ({ ...r, neisNote: '' }));
+        localStorage.setItem(STORAGE_KEYS.PAPS_RECORDS, JSON.stringify(cleaned));
+      }
+    }
+  } catch (err) {
+    console.error('Failed to delete all student NEIS notes:', err);
+  }
 }
 
 export async function saveStudentNeisNote(studentId: string, note: string): Promise<void> {

@@ -7,11 +7,19 @@ import {
   WorkoutLog,
   TeacherSettings
 } from '../types';
-import { getFirebaseFirestore } from './firebaseConfig';
-import { doc, getDoc, setDoc, collection, query, where, getDocs, deleteDoc } from 'firebase/firestore';
+import { db } from './firebaseConfig';
+import {
+  doc,
+  getDoc,
+  setDoc,
+  collection,
+  getDocs,
+  deleteDoc
+} from 'firebase/firestore';
 import { buildInitialStudentProfiles } from '../data/shinanStudents';
+import { handleFirestoreError, OperationType } from './firebaseErrors';
 
-const STORAGE_KEYS = {
+export const STORAGE_KEYS = {
   CURRENT_STUDENT: 'shinan_current_student',
   ALL_STUDENTS: 'shinan_all_students',
   PAPS_RECORDS: 'shinan_paps_records',
@@ -33,9 +41,9 @@ export function isTeacherAuthenticated(): boolean {
   }
 }
 
-export function setTeacherAuthenticated(auth: boolean): void {
+export function setTeacherAuthenticated(authStatus: boolean): void {
   try {
-    if (auth) {
+    if (authStatus) {
       sessionStorage.setItem(STORAGE_KEYS.TEACHER_AUTH, 'true');
     } else {
       sessionStorage.removeItem(STORAGE_KEYS.TEACHER_AUTH);
@@ -50,7 +58,9 @@ export function verifyTeacherPassword(password: string): boolean {
 }
 
 // 8개 본운동 기본 생성 헬퍼
-export function createDefaultMainExercises(presetType: 'cardio' | 'strength' | 'flexibility' | 'agility' | 'total'): MainExerciseSlot[] {
+export function createDefaultMainExercises(
+  presetType: 'cardio' | 'strength' | 'flexibility' | 'agility' | 'total'
+): MainExerciseSlot[] {
   const templates: Record<string, MainExerciseSlot[]> = {
     cardio: [
       { index: 1, name: '20m 셔틀런 인터벌', durationOrReps: '40초', category: '심폐지구력', targetMuscle: '전신 심폐' },
@@ -106,7 +116,7 @@ export function createDefaultMainExercises(presetType: 'cardio' | 'strength' | '
   return templates[presetType] || templates.total;
 }
 
-// 기본 5차시 기본 템플릿 (본운동 정확히 8개 고정 슬롯 포함)
+// 기본 5차시 기본 템플릿
 export const DEFAULT_LESSON_PLANS: LessonPlan[] = [
   {
     lessonWeek: 1,
@@ -234,14 +244,12 @@ export function getAllStudents(): StudentProfile[] {
       return officialList;
     }
 
-    // 신안해양과학고 공식 명단 학생들의 포함 여부 확인 및 병합 (기존 PIN 및 기록 보존)
     const existingMap = new Map(parsed.map((s) => [s.id, s]));
     let needsUpdate = false;
 
     const merged = officialList.map((official) => {
       const existing = existingMap.get(official.id);
       if (existing) {
-        // 기존 학생 정보가 있으면 PIN 및 마지막 로그인 시간 보존 (초기 1234이거나 없는 경우 0000으로 자동 마이그레이션)
         const effectivePin = (!existing.pin || existing.pin === '1234') ? '0000' : existing.pin;
         if (effectivePin !== existing.pin) needsUpdate = true;
         return {
@@ -281,21 +289,22 @@ export async function loginOrRegisterStudent(
   let existing = all.find((s) => s.id === studentId);
 
   // Firestore 조회 시도
-  const db = getFirebaseFirestore();
-  if (db) {
-    try {
-      const docRef = doc(db, 'students', studentId);
-      const snap = await getDoc(docRef);
-      if (snap.exists()) {
-        existing = snap.data() as StudentProfile;
-      }
-    } catch (e) {
-      console.warn('Firebase student fetch warning:', e);
+  const studentPath = `students/${studentId}`;
+  try {
+    const docRef = doc(db, 'students', studentId);
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      const firestoreData = snap.data() as StudentProfile;
+      existing = { ...existing, ...firestoreData };
     }
+  } catch (e) {
+    if (e instanceof Error && e.message.includes('insufficient permissions')) {
+      handleFirestoreError(e, OperationType.GET, studentPath);
+    }
+    console.warn('Firebase student fetch notice:', e);
   }
 
   if (existing) {
-    // 기존 PIN이 '1234'이거나 미설정된 상태에서 0000을 입력한 경우 마이그레이션 허용
     if ((!existing.pin || existing.pin === '1234') && pin === '0000') {
       existing.pin = '0000';
     }
@@ -306,9 +315,9 @@ export async function loginOrRegisterStudent(
         message: '보안 PIN 번호가 일치하지 않습니다. 올바른 4자리 PIN(기본 초기 PIN: 0000)을 입력해주세요.'
       };
     }
-    // PIN 일치 -> 로그인 성공
+
     existing.lastLoginAt = new Date().toISOString();
-    existing.name = name || existing.name; // 업데이트 가능
+    existing.name = name || existing.name;
     existing.gender = gender || existing.gender;
 
     // 로컬 갱신
@@ -316,19 +325,20 @@ export async function loginOrRegisterStudent(
     localStorage.setItem(STORAGE_KEYS.ALL_STUDENTS, JSON.stringify(updatedList));
     setCurrentStudent(existing);
 
-    // Firestore 갱신
-    if (db) {
-      try {
-        await setDoc(doc(db, 'students', studentId), existing, { merge: true });
-      } catch (e) {
-        console.warn('Firebase student update warning:', e);
+    // Firestore 갱신 (저장)
+    try {
+      await setDoc(doc(db, 'students', studentId), existing, { merge: true });
+    } catch (e) {
+      if (e instanceof Error && e.message.includes('insufficient permissions')) {
+        handleFirestoreError(e, OperationType.UPDATE, studentPath);
       }
+      console.warn('Firebase student update warning:', e);
     }
 
     return {
       success: true,
       student: existing,
-      message: `반갑습니다, ${existing.name} 학생! 로그인되었습니다.`
+      message: `반갑습니다, ${existing.name} 학생! 로그인 및 파이어베이스 연동이 완료되었습니다.`
     };
   }
 
@@ -350,18 +360,19 @@ export async function loginOrRegisterStudent(
   setCurrentStudent(newStudent);
 
   // Firestore 등록
-  if (db) {
-    try {
-      await setDoc(doc(db, 'students', studentId), newStudent);
-    } catch (e) {
-      console.warn('Firebase new student write warning:', e);
+  try {
+    await setDoc(doc(db, 'students', studentId), newStudent);
+  } catch (e) {
+    if (e instanceof Error && e.message.includes('insufficient permissions')) {
+      handleFirestoreError(e, OperationType.CREATE, studentPath);
     }
+    console.warn('Firebase new student write warning:', e);
   }
 
   return {
     success: true,
     student: newStudent,
-    message: `신안해양과학고 1학년 ${classNum}반 ${studentNum}번 ${newStudent.name} 학생 계정이 안전하게 생성되었습니다!`
+    message: `신안해양과학고 1학년 ${classNum}반 ${studentNum}번 ${newStudent.name} 학생 계정이 파이어베이스에 안전하게 생성되었습니다!`
   };
 }
 
@@ -401,14 +412,31 @@ export async function savePapsRecord(record: PAPSRecord): Promise<void> {
   }
   localStorage.setItem(STORAGE_KEYS.PAPS_RECORDS, JSON.stringify(updatedList));
 
-  // Firestore 동기화
-  const db = getFirebaseFirestore();
-  if (db) {
-    try {
-      await setDoc(doc(db, 'paps_records', record.id), record, { merge: true });
-    } catch (e) {
-      console.warn('Firebase paps record write warning:', e);
+  // Firestore 동기화 (전용 컬렉션 및 학생 문서 병합)
+  const papsPath = `paps_records/${record.id}`;
+  try {
+    await setDoc(doc(db, 'paps_records', record.id), record, { merge: true });
+    // 학생 문서의 최신 PAPS 결과도 병합 업데이트
+    const all = getAllStudents();
+    const stInfo = all.find((s) => s.id === record.studentId);
+    const studentPayload: Record<string, unknown> = {
+      paps_results: updatedList.filter((r) => r.studentId === record.studentId),
+      updatedAt: new Date().toISOString()
+    };
+    if (stInfo) {
+      studentPayload.id = stInfo.id;
+      studentPayload.grade = stInfo.grade;
+      studentPayload.classNum = stInfo.classNum;
+      studentPayload.studentNum = stInfo.studentNum;
+      studentPayload.name = stInfo.name;
+      studentPayload.gender = stInfo.gender;
     }
+    await setDoc(doc(db, 'students', record.studentId), studentPayload, { merge: true });
+  } catch (e) {
+    if (e instanceof Error && e.message.includes('insufficient permissions')) {
+      handleFirestoreError(e, OperationType.WRITE, papsPath);
+    }
+    console.warn('Firebase paps record write warning:', e);
   }
 }
 
@@ -429,13 +457,29 @@ export async function saveStudentFittPlan(plan: FITTPlan): Promise<void> {
   allPlans[plan.studentId] = plan;
   localStorage.setItem(STORAGE_KEYS.FITT_PLANS, JSON.stringify(allPlans));
 
-  const db = getFirebaseFirestore();
-  if (db) {
-    try {
-      await setDoc(doc(db, 'fitt_plans', plan.studentId), plan, { merge: true });
-    } catch (e) {
-      console.warn('Firebase fitt write warning:', e);
+  const fittPath = `fitt_plans/${plan.studentId}`;
+  try {
+    await setDoc(doc(db, 'fitt_plans', plan.studentId), plan, { merge: true });
+    const all = getAllStudents();
+    const stInfo = all.find((s) => s.id === plan.studentId);
+    const studentPayload: Record<string, unknown> = {
+      fitt_records: { plan },
+      updatedAt: new Date().toISOString()
+    };
+    if (stInfo) {
+      studentPayload.id = stInfo.id;
+      studentPayload.grade = stInfo.grade;
+      studentPayload.classNum = stInfo.classNum;
+      studentPayload.studentNum = stInfo.studentNum;
+      studentPayload.name = stInfo.name;
+      studentPayload.gender = stInfo.gender;
     }
+    await setDoc(doc(db, 'students', plan.studentId), studentPayload, { merge: true });
+  } catch (e) {
+    if (e instanceof Error && e.message.includes('insufficient permissions')) {
+      handleFirestoreError(e, OperationType.WRITE, fittPath);
+    }
+    console.warn('Firebase fitt write warning:', e);
   }
 }
 
@@ -456,17 +500,33 @@ export async function saveStudentLessonPlans(
 ): Promise<void> {
   localStorage.setItem(`${STORAGE_KEYS.LESSON_PLANS}_${studentId}`, JSON.stringify(plans));
 
-  const db = getFirebaseFirestore();
-  if (db) {
-    try {
-      await setDoc(doc(db, 'lesson_plans', studentId), {
-        studentId,
-        plans,
-        updatedAt: new Date().toISOString()
-      });
-    } catch (e) {
-      console.warn('Firebase lesson write warning:', e);
+  const lessonPath = `lesson_plans/${studentId}`;
+  try {
+    await setDoc(doc(db, 'lesson_plans', studentId), {
+      studentId,
+      plans,
+      updatedAt: new Date().toISOString()
+    });
+    const all = getAllStudents();
+    const stInfo = all.find((s) => s.id === studentId);
+    const studentPayload: Record<string, unknown> = {
+      fitt_records: { lessonPlans: plans },
+      updatedAt: new Date().toISOString()
+    };
+    if (stInfo) {
+      studentPayload.id = stInfo.id;
+      studentPayload.grade = stInfo.grade;
+      studentPayload.classNum = stInfo.classNum;
+      studentPayload.studentNum = stInfo.studentNum;
+      studentPayload.name = stInfo.name;
+      studentPayload.gender = stInfo.gender;
     }
+    await setDoc(doc(db, 'students', studentId), studentPayload, { merge: true });
+  } catch (e) {
+    if (e instanceof Error && e.message.includes('insufficient permissions')) {
+      handleFirestoreError(e, OperationType.WRITE, lessonPath);
+    }
+    console.warn('Firebase lesson write warning:', e);
   }
 }
 
@@ -489,14 +549,12 @@ export function getStudentWorkoutLogs(studentId: string): WorkoutLog[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.WORKOUT_LOGS);
     const allLogs: WorkoutLog[] = raw ? JSON.parse(raw) : [];
-    // Deduplicate by unique log id
     const seen = new Set<string>();
     const deduplicated = allLogs.filter((l) => {
       if (!l.id || seen.has(l.id)) return false;
       seen.add(l.id);
       return true;
     });
-    // If dirty duplicates existed in localStorage, clean up
     if (deduplicated.length !== allLogs.length) {
       localStorage.setItem(STORAGE_KEYS.WORKOUT_LOGS, JSON.stringify(deduplicated));
     }
@@ -521,13 +579,14 @@ export async function saveWorkoutLog(log: WorkoutLog): Promise<void> {
   }
   localStorage.setItem(STORAGE_KEYS.WORKOUT_LOGS, JSON.stringify(updatedList));
 
-  const db = getFirebaseFirestore();
-  if (db) {
-    try {
-      await setDoc(doc(db, 'workout_logs', log.id), log);
-    } catch (e) {
-      console.warn('Firebase workout log write warning:', e);
+  const logPath = `workout_logs/${log.id}`;
+  try {
+    await setDoc(doc(db, 'workout_logs', log.id), log);
+  } catch (e) {
+    if (e instanceof Error && e.message.includes('insufficient permissions')) {
+      handleFirestoreError(e, OperationType.WRITE, logPath);
     }
+    console.warn('Firebase workout log write warning:', e);
   }
 }
 
@@ -554,16 +613,17 @@ export async function updateStudentPin(
     }
 
     // Firestore 동기화
-    const db = getFirebaseFirestore();
-    if (db) {
-      try {
-        await setDoc(doc(db, 'students', studentId), { pin: newPin.trim() }, { merge: true });
-      } catch (e) {
-        console.warn('Firebase update student pin warning:', e);
+    const studentPath = `students/${studentId}`;
+    try {
+      await setDoc(doc(db, 'students', studentId), { pin: newPin.trim() }, { merge: true });
+    } catch (e) {
+      if (e instanceof Error && e.message.includes('insufficient permissions')) {
+        handleFirestoreError(e, OperationType.UPDATE, studentPath);
       }
+      console.warn('Firebase update student pin warning:', e);
     }
 
-    return { success: true, message: '비밀번호(PIN)가 성공적으로 변경되었습니다!' };
+    return { success: true, message: '비밀번호(PIN)가 성공적으로 변경되어 클라우드에 저장되었습니다!' };
   } catch (err) {
     console.error('Update student pin failed:', err);
     return { success: false, message: '비밀번호 변경 중 오류가 발생했습니다.' };
@@ -579,13 +639,14 @@ export async function deletePapsRecord(recordIdOrStudentId: string, maybeRecordI
     const filtered = allRecords.filter((r) => r.id !== targetId);
     localStorage.setItem(STORAGE_KEYS.PAPS_RECORDS, JSON.stringify(filtered));
 
-    const db = getFirebaseFirestore();
-    if (db) {
-      try {
-        await deleteDoc(doc(db, 'paps_records', targetId));
-      } catch (e) {
-        console.warn('Firebase paps delete warning:', e);
+    const papsPath = `paps_records/${targetId}`;
+    try {
+      await deleteDoc(doc(db, 'paps_records', targetId));
+    } catch (e) {
+      if (e instanceof Error && e.message.includes('insufficient permissions')) {
+        handleFirestoreError(e, OperationType.DELETE, papsPath);
       }
+      console.warn('Firebase paps delete warning:', e);
     }
   } catch (err) {
     console.error('Failed to delete PAPS record:', err);
@@ -600,14 +661,11 @@ export async function deleteAllPapsRecordsForStudent(studentId: string): Promise
     const filtered = allRecords.filter((r) => r.studentId !== studentId);
     localStorage.setItem(STORAGE_KEYS.PAPS_RECORDS, JSON.stringify(filtered));
 
-    const db = getFirebaseFirestore();
-    if (db) {
-      for (const r of toDelete) {
-        try {
-          await deleteDoc(doc(db, 'paps_records', r.id));
-        } catch (e) {
-          console.warn('Firebase individual paps delete warning:', e);
-        }
+    for (const r of toDelete) {
+      try {
+        await deleteDoc(doc(db, 'paps_records', r.id));
+      } catch (e) {
+        console.warn('Firebase individual paps delete warning:', e);
       }
     }
   } catch (err) {
@@ -623,13 +681,14 @@ export async function deleteWorkoutLog(logIdOrStudentId: string, maybeLogId?: st
     const filtered = allLogs.filter((l) => l.id !== targetId);
     localStorage.setItem(STORAGE_KEYS.WORKOUT_LOGS, JSON.stringify(filtered));
 
-    const db = getFirebaseFirestore();
-    if (db) {
-      try {
-        await deleteDoc(doc(db, 'workout_logs', targetId));
-      } catch (e) {
-        console.warn('Firebase workout log delete warning:', e);
+    const logPath = `workout_logs/${targetId}`;
+    try {
+      await deleteDoc(doc(db, 'workout_logs', targetId));
+    } catch (e) {
+      if (e instanceof Error && e.message.includes('insufficient permissions')) {
+        handleFirestoreError(e, OperationType.DELETE, logPath);
       }
+      console.warn('Firebase workout log delete warning:', e);
     }
   } catch (err) {
     console.error('Failed to delete workout log:', err);
@@ -644,14 +703,11 @@ export async function deleteAllWorkoutLogsForStudent(studentId: string): Promise
     const filtered = allLogs.filter((l) => l.studentId !== studentId);
     localStorage.setItem(STORAGE_KEYS.WORKOUT_LOGS, JSON.stringify(filtered));
 
-    const db = getFirebaseFirestore();
-    if (db) {
-      for (const l of toDelete) {
-        try {
-          await deleteDoc(doc(db, 'workout_logs', l.id));
-        } catch (e) {
-          console.warn('Firebase individual workout log delete warning:', e);
-        }
+    for (const l of toDelete) {
+      try {
+        await deleteDoc(doc(db, 'workout_logs', l.id));
+      } catch (e) {
+        console.warn('Firebase individual workout log delete warning:', e);
       }
     }
   } catch (err) {
@@ -665,6 +721,11 @@ export async function resetStudentFittPlan(studentId: string): Promise<void> {
     const allPlans: Record<string, FITTPlan> = raw ? JSON.parse(raw) : {};
     delete allPlans[studentId];
     localStorage.setItem(STORAGE_KEYS.FITT_PLANS, JSON.stringify(allPlans));
+    try {
+      await deleteDoc(doc(db, 'fitt_plans', studentId));
+    } catch (e) {
+      console.warn('Firebase delete fitt plan warning:', e);
+    }
   } catch (err) {
     console.error('Failed to reset student FITT plan:', err);
   }
@@ -673,6 +734,11 @@ export async function resetStudentFittPlan(studentId: string): Promise<void> {
 export async function resetStudentLessonPlans(studentId: string): Promise<void> {
   try {
     localStorage.removeItem(`${STORAGE_KEYS.LESSON_PLANS}_${studentId}`);
+    try {
+      await deleteDoc(doc(db, 'lesson_plans', studentId));
+    } catch (e) {
+      console.warn('Firebase delete lesson plans warning:', e);
+    }
   } catch (err) {
     console.error('Failed to reset student lesson plans:', err);
   }
@@ -710,13 +776,14 @@ export async function deleteStudentNeisNote(studentId: string): Promise<void> {
       await savePapsRecord(latest);
     }
 
-    const db = getFirebaseFirestore();
-    if (db) {
-      try {
-        await deleteDoc(doc(db, 'neis_notes', studentId));
-      } catch (e) {
-        console.warn('Firebase neis note delete warning:', e);
+    const neisPath = `neis_notes/${studentId}`;
+    try {
+      await deleteDoc(doc(db, 'neis_notes', studentId));
+    } catch (e) {
+      if (e instanceof Error && e.message.includes('insufficient permissions')) {
+        handleFirestoreError(e, OperationType.DELETE, neisPath);
       }
+      console.warn('Firebase neis note delete warning:', e);
     }
   } catch (err) {
     console.error('Failed to delete student NEIS note:', err);
@@ -754,21 +821,22 @@ export async function saveStudentNeisNote(studentId: string, note: string): Prom
     }
 
     // Firestore 동기화
-    const db = getFirebaseFirestore();
-    if (db) {
-      try {
-        await setDoc(
-          doc(db, 'neis_notes', studentId),
-          {
-            studentId,
-            note,
-            updatedAt: new Date().toISOString()
-          },
-          { merge: true }
-        );
-      } catch (e) {
-        console.warn('Firebase neis note write warning:', e);
+    const neisPath = `neis_notes/${studentId}`;
+    try {
+      await setDoc(
+        doc(db, 'neis_notes', studentId),
+        {
+          studentId,
+          note,
+          updatedAt: new Date().toISOString()
+        },
+        { merge: true }
+      );
+    } catch (e) {
+      if (e instanceof Error && e.message.includes('insufficient permissions')) {
+        handleFirestoreError(e, OperationType.WRITE, neisPath);
       }
+      console.warn('Firebase neis note write warning:', e);
     }
   } catch (err) {
     console.error('Failed to save student NEIS note:', err);
@@ -781,6 +849,92 @@ export function getAllStudentNeisNotes(): Record<string, string> {
     return raw ? JSON.parse(raw) : {};
   } catch {
     return {};
+  }
+}
+
+// 5-4. Firestore로부터 원격 데이터 일괄 동기화 (초기화 및 백그라운드 갱신)
+export async function syncAllDataFromFirestore(): Promise<void> {
+  try {
+    // 0. Students Profiles
+    const studentsSnap = await getDocs(collection(db, 'students'));
+    if (!studentsSnap.empty) {
+      const all = getAllStudents();
+      const studentMap = new Map<string, StudentProfile>();
+      all.forEach((s) => studentMap.set(s.id, s));
+      studentsSnap.forEach((d) => {
+        const remote = d.data() as StudentProfile;
+        if (remote && remote.id) {
+          const current = studentMap.get(remote.id);
+          studentMap.set(remote.id, { ...current, ...remote });
+        }
+      });
+      localStorage.setItem(STORAGE_KEYS.ALL_STUDENTS, JSON.stringify(Array.from(studentMap.values())));
+    }
+
+    // 1. PAPS Records
+    const papsSnap = await getDocs(collection(db, 'paps_records'));
+    if (!papsSnap.empty) {
+      const firestorePaps: PAPSRecord[] = [];
+      papsSnap.forEach((d) => firestorePaps.push(d.data() as PAPSRecord));
+      const localPaps = getAllPapsRecords();
+      const papsMap = new Map<string, PAPSRecord>();
+      localPaps.forEach((p) => papsMap.set(p.id, p));
+      firestorePaps.forEach((p) => papsMap.set(p.id, p));
+      localStorage.setItem(STORAGE_KEYS.PAPS_RECORDS, JSON.stringify(Array.from(papsMap.values())));
+    }
+
+    // 2. FITT Plans
+    const fittSnap = await getDocs(collection(db, 'fitt_plans'));
+    if (!fittSnap.empty) {
+      const raw = localStorage.getItem(STORAGE_KEYS.FITT_PLANS);
+      const allPlans: Record<string, FITTPlan> = raw ? JSON.parse(raw) : {};
+      fittSnap.forEach((d) => {
+        const plan = d.data() as FITTPlan;
+        if (plan && plan.studentId) allPlans[plan.studentId] = plan;
+      });
+      localStorage.setItem(STORAGE_KEYS.FITT_PLANS, JSON.stringify(allPlans));
+    }
+
+    // 3. Lesson Plans
+    const lessonSnap = await getDocs(collection(db, 'lesson_plans'));
+    if (!lessonSnap.empty) {
+      lessonSnap.forEach((d) => {
+        const data = d.data();
+        if (data && data.studentId && Array.isArray(data.plans)) {
+          localStorage.setItem(`${STORAGE_KEYS.LESSON_PLANS}_${data.studentId}`, JSON.stringify(data.plans));
+        }
+      });
+    }
+
+    // 4. Workout Logs
+    const workoutSnap = await getDocs(collection(db, 'workout_logs'));
+    if (!workoutSnap.empty) {
+      const raw = localStorage.getItem(STORAGE_KEYS.WORKOUT_LOGS);
+      const allLogs: WorkoutLog[] = raw ? JSON.parse(raw) : [];
+      const logMap = new Map<string, WorkoutLog>();
+      allLogs.forEach((l) => logMap.set(l.id, l));
+      workoutSnap.forEach((d) => {
+        const log = d.data() as WorkoutLog;
+        if (log && log.id) logMap.set(log.id, log);
+      });
+      localStorage.setItem(STORAGE_KEYS.WORKOUT_LOGS, JSON.stringify(Array.from(logMap.values())));
+    }
+
+    // 5. NEIS Notes
+    const neisSnap = await getDocs(collection(db, 'neis_notes'));
+    if (!neisSnap.empty) {
+      const raw = localStorage.getItem(STORAGE_KEYS.STUDENT_NEIS_NOTES);
+      const allNotes: Record<string, string> = raw ? JSON.parse(raw) : {};
+      neisSnap.forEach((d) => {
+        const data = d.data();
+        if (data && data.studentId && typeof data.note === 'string') {
+          allNotes[data.studentId] = data.note;
+        }
+      });
+      localStorage.setItem(STORAGE_KEYS.STUDENT_NEIS_NOTES, JSON.stringify(allNotes));
+    }
+  } catch (err) {
+    console.warn('Initial Firestore sync notice:', err);
   }
 }
 
@@ -829,12 +983,10 @@ export async function syncToGoogleSheet(payload: {
       ...payload.data
     };
 
-    // CORS 및 Apps Script Webhook 대응
-    // Google Apps Script는 브라우저 직결 시 mode: 'no-cors' 전송을 사용할 수 있음
     await fetch(settings.googleSheetWebhookUrl, {
       method: 'POST',
       headers: {
-        'Content-Type': 'text/plain;charset=utf-8' // GAS에서 e.postData.contents 로 받기 용이
+        'Content-Type': 'text/plain;charset=utf-8'
       },
       body: JSON.stringify(bodyData),
       mode: 'no-cors'
@@ -853,11 +1005,6 @@ export async function syncToGoogleSheet(payload: {
   }
 }
 
-/**
- * Google Apps Script(GAS) 웹앱 전용 수동 내보내기 함수
- * - 무분별한 요청/할당량 초과를 방지하기 위해 사용자가 '시트로 내보내기'를 클릭했을 때만 호출
- * - type: 'PAPS' | 'FITT' 구조의 분기형 페이로드 전송
- */
 export async function exportToGoogleSheetGas(
   type: 'PAPS' | 'FITT',
   payload: Record<string, any>
@@ -874,12 +1021,11 @@ export async function exportToGoogleSheetGas(
 
   try {
     const postBody = {
-      type, // 'PAPS' 또는 'FITT'
+      type,
       timestamp: new Date().toISOString(),
       payload
     };
 
-    // Google Apps Script는 리디렉션 및 CORS 제한으로 인해 'no-cors' 전송을 수행합니다.
     await fetch(webhookUrl, {
       method: 'POST',
       headers: {

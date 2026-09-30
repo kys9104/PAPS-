@@ -1,5 +1,7 @@
-import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
-import { getFirestore, Firestore } from 'firebase/firestore';
+import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
+import { getFirestore, Firestore, doc, getDocFromServer } from 'firebase/firestore';
+import { getAuth, Auth, signInAnonymously } from 'firebase/auth';
+import appletConfig from '../../firebase-applet-config.json';
 
 export interface FirebaseCustomConfig {
   apiKey: string;
@@ -11,8 +13,33 @@ export interface FirebaseCustomConfig {
   firestoreDatabaseId?: string;
 }
 
-let cachedDb: Firestore | null = null;
-let cachedApp: FirebaseApp | null = null;
+// 1. Initialize Firebase App and Firestore with provisioned project
+export const app: FirebaseApp = getApps().length > 0 ? getApp() : initializeApp(appletConfig);
+export const db: Firestore = getFirestore(app, appletConfig.firestoreDatabaseId); /* CRITICAL: The app will break without this line */
+export const auth: Auth = getAuth(app);
+
+// Attempt anonymous sign-in in background
+signInAnonymously(auth).catch(() => {
+  // Silent fallback if anonymous auth provider is not configured
+});
+
+// 2. Validate Connection to Firestore on startup as required by Firebase skill
+export async function testFirestoreConnection(): Promise<boolean> {
+  try {
+    await getDocFromServer(doc(db, 'test', 'connection'));
+    return true;
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('the client is offline')) {
+      console.error('Please check your Firebase configuration.');
+    }
+    return false;
+  }
+}
+
+// Auto-run connection test
+testFirestoreConnection().catch((err) => {
+  console.warn('Initial Firestore connection test notice:', err);
+});
 
 export function getStoredFirebaseConfig(): FirebaseCustomConfig | null {
   try {
@@ -24,17 +51,16 @@ export function getStoredFirebaseConfig(): FirebaseCustomConfig | null {
     console.warn('Failed to parse local firebase config', e);
   }
 
-  // Check Vite env
-  const env = (import.meta as unknown as { env?: Record<string, string | undefined> })?.env || {};
-  if (env.VITE_FIREBASE_API_KEY && env.VITE_FIREBASE_PROJECT_ID) {
+  // Return applet config if available
+  if (appletConfig && appletConfig.apiKey && appletConfig.projectId) {
     return {
-      apiKey: env.VITE_FIREBASE_API_KEY,
-      authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || `${env.VITE_FIREBASE_PROJECT_ID}.firebaseapp.com`,
-      projectId: env.VITE_FIREBASE_PROJECT_ID,
-      storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || `${env.VITE_FIREBASE_PROJECT_ID}.appspot.com`,
-      messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
-      appId: env.VITE_FIREBASE_APP_ID || '',
-      firestoreDatabaseId: env.VITE_FIREBASE_DATABASE_ID || '(default)'
+      apiKey: appletConfig.apiKey,
+      authDomain: appletConfig.authDomain || `${appletConfig.projectId}.firebaseapp.com`,
+      projectId: appletConfig.projectId,
+      storageBucket: appletConfig.storageBucket || `${appletConfig.projectId}.appspot.com`,
+      messagingSenderId: appletConfig.messagingSenderId || '',
+      appId: appletConfig.appId || '',
+      firestoreDatabaseId: appletConfig.firestoreDatabaseId || '(default)'
     };
   }
 
@@ -44,33 +70,11 @@ export function getStoredFirebaseConfig(): FirebaseCustomConfig | null {
 export function saveFirebaseConfig(config: FirebaseCustomConfig | null): void {
   if (!config) {
     localStorage.removeItem('shinan_marine_firebase_config');
-    cachedDb = null;
-    cachedApp = null;
   } else {
     localStorage.setItem('shinan_marine_firebase_config', JSON.stringify(config));
-    cachedDb = null;
-    cachedApp = null;
   }
 }
 
 export function getFirebaseFirestore(): Firestore | null {
-  if (cachedDb) return cachedDb;
-
-  const config = getStoredFirebaseConfig();
-  if (!config || !config.apiKey || !config.projectId) {
-    return null;
-  }
-
-  try {
-    if (getApps().length === 0) {
-      cachedApp = initializeApp(config);
-    } else {
-      cachedApp = getApps()[0];
-    }
-    cachedDb = getFirestore(cachedApp, config.firestoreDatabaseId || '(default)');
-    return cachedDb;
-  } catch (err) {
-    console.error('Firebase Firestore init error:', err);
-    return null;
-  }
+  return db;
 }

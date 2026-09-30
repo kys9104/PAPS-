@@ -3,10 +3,7 @@ import {
   doc,
   collection,
   onSnapshot,
-  setDoc,
-  updateDoc,
-  getDocs,
-  Firestore
+  setDoc
 } from 'firebase/firestore';
 import {
   StudentProfile,
@@ -16,9 +13,9 @@ import {
   WorkoutLog,
   StudentProgressStatus
 } from '../types';
-import { getFirebaseFirestore } from './firebaseConfig';
+import { db } from './firebaseConfig';
+import { handleFirestoreError, OperationType } from './firebaseErrors';
 import {
-  getCurrentStudent,
   getAllStudents,
   getAllPapsRecords,
   getStudentPapsRecords,
@@ -27,21 +24,8 @@ import {
   getStudentWorkoutLogs,
   savePapsRecord as saveLocalPaps,
   saveStudentFittPlan as saveLocalFitt,
-  saveStudentLessonPlans as saveLocalLessons,
-  saveWorkoutLog as saveLocalWorkoutLog
+  saveStudentLessonPlans as saveLocalLessons
 } from './storageService';
-
-/**
- * Firestore Database Schema:
- * Collection: "students" (Document ID: studentId e.g. "1-1-01")
- * ├── profile: StudentProfile
- * ├── checklist: StudentProgressStatus { customPlanCreated, selfCheckCompleted, lesson5Created }
- * ├── paps_results: PAPSRecord[] (최신 기록 및 히스토리)
- * └── fitt_records:
- *     ├── plan: FITTPlan
- *     ├── lessonPlans: LessonPlan[]
- *     └── workoutLogs: WorkoutLog[]
- */
 
 export interface StudentFirestoreData {
   profile: StudentProfile;
@@ -111,9 +95,7 @@ export function useStudentData(studentId?: string | null) {
     loadLocalData(studentId);
 
     // 2. Firestore 구독 시도
-    const db = getFirebaseFirestore();
-    if (!db) return;
-
+    const studentPath = `students/${studentId}`;
     try {
       const studentDocRef = doc(db, 'students', studentId);
       const unsubscribe = onSnapshot(
@@ -140,6 +122,9 @@ export function useStudentData(studentId?: string | null) {
           setIsLoading(false);
         },
         (error) => {
+          if (error && error.message.includes('insufficient permissions')) {
+            handleFirestoreError(error, OperationType.GET, studentPath);
+          }
           console.warn('Firestore onSnapshot error (fallback to local):', error);
           setIsLoading(false);
         }
@@ -154,16 +139,14 @@ export function useStudentData(studentId?: string | null) {
 
   // PAPS 저장 (로컬 + Firestore)
   const savePaps = async (record: PAPSRecord) => {
-    // 1. 로컬 저장
-    saveLocalPaps(record);
+    await saveLocalPaps(record);
     setPapsRecords((prev) => {
       const filtered = prev.filter((r) => r.id !== record.id);
       return [record, ...filtered];
     });
 
-    // 2. Firestore 저장
-    const db = getFirebaseFirestore();
-    if (db && studentId) {
+    if (studentId) {
+      const studentPath = `students/${studentId}`;
       try {
         const studentDocRef = doc(db, 'students', studentId);
         const currentRecords = getStudentPapsRecords(studentId);
@@ -176,6 +159,9 @@ export function useStudentData(studentId?: string | null) {
           { merge: true }
         );
       } catch (err) {
+        if (err instanceof Error && err.message.includes('insufficient permissions')) {
+          handleFirestoreError(err, OperationType.WRITE, studentPath);
+        }
         console.error('Firestore savePaps error:', err);
       }
     }
@@ -183,7 +169,7 @@ export function useStudentData(studentId?: string | null) {
 
   // FITT 운동 처방 저장 (로컬 + Firestore)
   const saveFitt = async (plan: FITTPlan) => {
-    saveLocalFitt(plan);
+    await saveLocalFitt(plan);
     setFittPlan(plan);
 
     const hasFitt = Boolean(plan.goalStatement && plan.frequency);
@@ -199,8 +185,8 @@ export function useStudentData(studentId?: string | null) {
     };
     setProgressStatus(newChecklist);
 
-    const db = getFirebaseFirestore();
-    if (db && studentId) {
+    if (studentId) {
+      const studentPath = `students/${studentId}`;
       try {
         const studentDocRef = doc(db, 'students', studentId);
         await setDoc(
@@ -215,6 +201,9 @@ export function useStudentData(studentId?: string | null) {
           { merge: true }
         );
       } catch (err) {
+        if (err instanceof Error && err.message.includes('insufficient permissions')) {
+          handleFirestoreError(err, OperationType.WRITE, studentPath);
+        }
         console.error('Firestore saveFitt error:', err);
       }
     }
@@ -222,7 +211,7 @@ export function useStudentData(studentId?: string | null) {
 
   // 5차시 계획서 저장 (로컬 + Firestore)
   const saveLessons = async (lessons: LessonPlan[]) => {
-    saveLocalLessons(studentId || '', lessons);
+    await saveLocalLessons(studentId || '', lessons);
     setLessonPlans(lessons);
 
     const hasLesson5 = lessons.length === 5 && lessons.every((l) => l.title);
@@ -232,8 +221,8 @@ export function useStudentData(studentId?: string | null) {
     };
     setProgressStatus(newChecklist);
 
-    const db = getFirebaseFirestore();
-    if (db && studentId) {
+    if (studentId) {
+      const studentPath = `students/${studentId}`;
       try {
         const studentDocRef = doc(db, 'students', studentId);
         await setDoc(
@@ -248,6 +237,9 @@ export function useStudentData(studentId?: string | null) {
           { merge: true }
         );
       } catch (err) {
+        if (err instanceof Error && err.message.includes('insufficient permissions')) {
+          handleFirestoreError(err, OperationType.WRITE, studentPath);
+        }
         console.error('Firestore saveLessons error:', err);
       }
     }
@@ -289,7 +281,7 @@ export function useAllStudentsRealtime() {
   const [students, setStudents] = useState<StudentProfile[]>(() => getAllStudents());
   const [papsMap, setPapsMap] = useState<Record<string, PAPSRecord>>({});
   const [progressMap, setProgressMap] = useState<Record<string, StudentProgressStatus>>({});
-  const [isFirestoreLive, setIsFirestoreLive] = useState<boolean>(false);
+  const [isFirestoreLive, setIsFirestoreLive] = useState<boolean>(true);
 
   // 로컬 스토리지 데이터로 초기 맵 구성
   const refreshFromLocal = useCallback(() => {
@@ -325,12 +317,7 @@ export function useAllStudentsRealtime() {
   useEffect(() => {
     refreshFromLocal();
 
-    const db = getFirebaseFirestore();
-    if (!db) {
-      setIsFirestoreLive(false);
-      return;
-    }
-
+    const collectionPath = 'students';
     try {
       const studentsColRef = collection(db, 'students');
       const unsubscribe = onSnapshot(
@@ -356,6 +343,9 @@ export function useAllStudentsRealtime() {
           setProgressMap(newProgressMap);
         },
         (err) => {
+          if (err && err.message.includes('insufficient permissions')) {
+            handleFirestoreError(err, OperationType.LIST, collectionPath);
+          }
           console.warn('All students realtime onSnapshot error:', err);
           setIsFirestoreLive(false);
         }

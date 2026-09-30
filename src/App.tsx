@@ -23,7 +23,8 @@ import {
   deletePapsRecord,
   deleteWorkoutLog,
   getTeacherSettings,
-  getAllStudents
+  getAllStudents,
+  syncAllDataFromFirestore
 } from './services/storageService';
 import { Header } from './components/Header';
 import { AuthModal } from './components/AuthModal';
@@ -182,6 +183,16 @@ export default function App() {
       saveWorkoutLog(sampleLog);
     }
 
+    // Firestore 데이터 동기화 백그라운드 호출
+    syncAllDataFromFirestore().then(() => {
+      const curr = getCurrentStudent();
+      if (curr) {
+        refreshStudentData(curr);
+      }
+    }).catch((e) => {
+      console.warn('Initial background Firestore sync notice:', e);
+    });
+
     // 세션이 유효하고 로그인된 학생이 있는 경우에만 학생 데이터를 불러옴
     const hasActiveSession = sessionStorage.getItem('shinan_session_active') === 'true';
     const activeStudent = getCurrentStudent();
@@ -193,6 +204,20 @@ export default function App() {
       setStudent(null);
     }
   }, []);
+
+  // 탭 변경 시 최신 클라우드 데이터 백그라운드 동기화
+  useEffect(() => {
+    if (isLoggedIn) {
+      syncAllDataFromFirestore().then(() => {
+        const curr = getCurrentStudent();
+        if (curr) {
+          refreshStudentData(curr);
+        }
+      }).catch((e) => {
+        console.warn('Tab change Firestore sync notice:', e);
+      });
+    }
+  }, [currentTab, isLoggedIn]);
 
   const handleStudentLoginFromView = (selectedStudent: StudentProfile) => {
     try {

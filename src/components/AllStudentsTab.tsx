@@ -14,7 +14,6 @@ import {
   HeartPulse,
   Award,
   BookOpen,
-  FileText,
   Activity,
   Layers,
   ChevronRight,
@@ -48,10 +47,12 @@ import {
   getStudentPapsRecords,
   savePapsRecord,
   getStudentLessonPlans,
-  getStudentNeisNote,
-  saveStudentNeisNote,
-  exportClassDataAsCsv
+  exportClassDataAsCsv,
+  syncAllDataFromFirestore,
+  STORAGE_KEYS
 } from '../services/storageService';
+import { db } from '../services/firebaseConfig';
+import { collection, onSnapshot } from 'firebase/firestore';
 
 interface AllStudentsTabProps {
   currentStudent: StudentProfile | null;
@@ -74,6 +75,58 @@ export const AllStudentsTab: React.FC<AllStudentsTabProps> = ({
   const [allStudents, setAllStudents] = useState<StudentProfile[]>(() => getAllStudents());
   const [allPapsRecords, setAllPapsRecords] = useState<PAPSRecord[]>(() => getAllPapsRecords());
   const [refreshKey, setRefreshKey] = useState<number>(0);
+
+  // Firestore 실시간 동기화 리스너 등록
+  useEffect(() => {
+    // 1. 마운트 시 최신 데이터 원격 동기화
+    syncAllDataFromFirestore().then(() => {
+      refreshData();
+    }).catch((err) => {
+      console.warn('AllStudentsTab Firestore initial sync:', err);
+    });
+
+    // 2. PAPS 기록 및 학생 실시간 onSnapshot 구독
+    try {
+      const papsUnsub = onSnapshot(collection(db, 'paps_records'), (snap) => {
+        const records: PAPSRecord[] = [];
+        snap.forEach((d) => records.push(d.data() as PAPSRecord));
+        if (records.length > 0) {
+          setAllPapsRecords(records);
+          localStorage.setItem(STORAGE_KEYS.PAPS_RECORDS, JSON.stringify(records));
+        }
+      }, (err) => {
+        console.warn('Realtime paps_records sync notice:', err);
+      });
+
+      const studentsUnsub = onSnapshot(collection(db, 'students'), (snap) => {
+        const remoteStudents: StudentProfile[] = [];
+        snap.forEach((d) => remoteStudents.push(d.data() as StudentProfile));
+        if (remoteStudents.length > 0) {
+          const official = getAllStudents();
+          const map = new Map<string, StudentProfile>();
+          official.forEach((s) => map.set(s.id, s));
+          remoteStudents.forEach((s) => {
+            if (s && s.id) {
+              const base = map.get(s.id);
+              map.set(s.id, { ...base, ...s });
+            }
+          });
+          const merged = Array.from(map.values());
+          setAllStudents(merged);
+          localStorage.setItem(STORAGE_KEYS.ALL_STUDENTS, JSON.stringify(merged));
+        }
+      }, (err) => {
+        console.warn('Realtime students sync notice:', err);
+      });
+
+      return () => {
+        papsUnsub();
+        studentsUnsub();
+      };
+    } catch (e) {
+      console.warn('Failed to attach realtime listeners in AllStudentsTab:', e);
+    }
+  }, []);
 
   // 필터 및 검색
   const [selectedClass, setSelectedClass] = useState<'all' | '1' | '2'>('all');
@@ -121,16 +174,6 @@ export const AllStudentsTab: React.FC<AllStudentsTabProps> = ({
       const plans = getStudentLessonPlans(s.id);
       const count = plans.filter((p) => p.isCompleted).length;
       map.set(s.id, count);
-    });
-    return map;
-  }, [allStudents, refreshKey]);
-
-  // 학생별 세특 저장 여부 맵
-  const studentNeisNoteMap = useMemo(() => {
-    const map = new Map<string, string>();
-    allStudents.forEach((s) => {
-      const note = getStudentNeisNote(s.id);
-      if (note) map.set(s.id, note);
     });
     return map;
   }, [allStudents, refreshKey]);
@@ -637,14 +680,13 @@ export const AllStudentsTab: React.FC<AllStudentsTabProps> = ({
                     </div>
                   </th>
                   <th className="py-3.5 px-3 text-center">5차시 실천</th>
-                  <th className="py-3.5 px-3 text-center">세특</th>
                   <th className="py-3.5 px-4 text-center">관리·조회</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#1e2f5b]/60">
                 {filteredStudents.length === 0 ? (
                   <tr>
-                    <td colSpan={12} className="py-12 text-center text-slate-400 text-sm">
+                    <td colSpan={11} className="py-12 text-center text-slate-400 text-sm">
                       조건에 일치하는 학생이 없습니다.
                     </td>
                   </tr>
@@ -652,7 +694,6 @@ export const AllStudentsTab: React.FC<AllStudentsTabProps> = ({
                   filteredStudents.map((s) => {
                     const paps = studentPapsMap.get(s.id);
                     const lessonCount = studentLessonCountMap.get(s.id) || 0;
-                    const hasNeis = Boolean(studentNeisNoteMap.get(s.id));
                     const isSelf = currentStudent?.id === s.id;
 
                     return (
@@ -826,18 +867,6 @@ export const AllStudentsTab: React.FC<AllStudentsTabProps> = ({
                           </span>
                         </td>
 
-                        {/* NEIS Note Status */}
-                        <td className="py-3 px-3 text-center whitespace-nowrap">
-                          {hasNeis ? (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400">
-                              <CheckCircle2 className="w-3.5 h-3.5" />
-                              <span>작성</span>
-                            </span>
-                          ) : (
-                            <span className="text-[11px] text-slate-500">미작성</span>
-                          )}
-                        </td>
-
                         {/* Action Buttons: Teacher vs Student */}
                         <td className="py-3 px-4 text-center whitespace-nowrap">
                           <div className="flex items-center justify-center gap-1.5">
@@ -860,18 +889,6 @@ export const AllStudentsTab: React.FC<AllStudentsTabProps> = ({
                                 <span>상세 조회</span>
                               </button>
                             )}
-
-                            {/* Move to NEIS or Profile shortcut */}
-                            <button
-                              onClick={() => {
-                                onSelectStudent(s);
-                                onNavigateTab('neis');
-                              }}
-                              className="p-1.5 rounded-xl bg-[#070e1e] hover:bg-[#142245] text-slate-400 hover:text-white border border-[#1e2f5b] transition cursor-pointer"
-                              title="생활기록부 세특 탭으로 이동"
-                            >
-                              <FileText className="w-3 h-3" />
-                            </button>
                           </div>
                         </td>
                       </tr>
@@ -888,7 +905,6 @@ export const AllStudentsTab: React.FC<AllStudentsTabProps> = ({
           {filteredStudents.map((s) => {
             const paps = studentPapsMap.get(s.id);
             const lessonCount = studentLessonCountMap.get(s.id) || 0;
-            const hasNeis = Boolean(studentNeisNoteMap.get(s.id));
             const isSelf = currentStudent?.id === s.id;
 
             return (
@@ -1004,10 +1020,6 @@ export const AllStudentsTab: React.FC<AllStudentsTabProps> = ({
                   <div className="flex items-center gap-2">
                     <span className="text-slate-400 text-[11px]">실습:</span>
                     <span className="font-bold text-white font-mono">{lessonCount}/5차시</span>
-                    <span className="text-slate-600">·</span>
-                    <span className={hasNeis ? 'text-emerald-400 font-bold' : 'text-slate-500'}>
-                      {hasNeis ? '세특 작성' : '세특 미작성'}
-                    </span>
                   </div>
 
                   <div className="flex items-center gap-1.5">
@@ -1552,16 +1564,6 @@ const ViewDetailModal: React.FC<ViewDetailModalProps> = ({
                 ))}
               </div>
             </div>
-
-            {/* NEIS Note Preview */}
-            {record.neisNote && (
-              <div className="p-3.5 bg-[#070e1e] rounded-2xl border border-[#1e2f5b] space-y-1">
-                <span className="text-[11px] font-bold text-[#E8FD3B] block">생활기록부 추천 세특</span>
-                <p className="text-xs text-slate-300 leading-relaxed line-clamp-3">
-                  {record.neisNote}
-                </p>
-              </div>
-            )}
           </div>
         ) : (
           <div className="bg-[#070e1e] p-8 rounded-2xl border border-[#1e2f5b] text-center space-y-2">

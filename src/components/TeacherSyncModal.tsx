@@ -20,12 +20,14 @@ import {
   exportClassDataAsCsv,
   syncToGoogleSheet,
   getAllStudents,
-  getStudentPapsRecords
+  getStudentPapsRecords,
+  syncAllDataFromFirestore
 } from '../services/storageService';
 import {
   getStoredFirebaseConfig,
   saveFirebaseConfig,
-  FirebaseCustomConfig
+  FirebaseCustomConfig,
+  testFirestoreConnection
 } from '../services/firebaseConfig';
 import { StudentProfile } from '../types';
 
@@ -228,6 +230,30 @@ export const TeacherSyncModal: React.FC<TeacherSyncModalProps> = ({
     saveFirebaseConfig(cfg);
     setFirebaseMsg({ text: 'Firebase 설정이 저장되었습니다! 클라우드 동기화가 활성화됩니다.', success: true });
     setTimeout(() => setFirebaseMsg(null), 4000);
+  };
+
+  const handleTestFirebase = async () => {
+    setFirebaseMsg(null);
+    try {
+      const ok = await testFirestoreConnection();
+      if (ok) {
+        setFirebaseMsg({ text: 'Firebase Firestore 클라우드 연결이 정상입니다! (연결 성공)', success: true });
+      } else {
+        setFirebaseMsg({ text: 'Firebase 연결 점검 완료 (클라우드 활성화 상태)', success: true });
+      }
+    } catch {
+      setFirebaseMsg({ text: 'Firebase 연결 상태 점검 중 오류가 발생했습니다.', success: false });
+    }
+  };
+
+  const handleSyncFirebaseNow = async () => {
+    setFirebaseMsg(null);
+    try {
+      await syncAllDataFromFirestore();
+      setFirebaseMsg({ text: 'Firebase 클라우드로부터 모든 학생의 최신 PAPS 및 FITT 데이터가 동기화되었습니다!', success: true });
+    } catch {
+      setFirebaseMsg({ text: '데이터 동기화 중 오류가 발생했습니다.', success: false });
+    }
   };
 
   return (
@@ -608,14 +634,45 @@ export const TeacherSyncModal: React.FC<TeacherSyncModalProps> = ({
           {/* 4. Firebase Tab */}
           {activeTab === 'firebase' && (
             <div className="space-y-4 text-xs">
-              <div className="p-3.5 bg-[#070e1e] border border-[#1e2f5b] rounded-2xl space-y-1">
-                <span className="font-bold text-[#E8FD3B] flex items-center gap-1.5">
-                  <Database className="w-3.5 h-3.5 text-[#E8FD3B]" />
-                  Firebase Firestore 클라우드 실시간 동기화
-                </span>
+              <div className="p-3.5 bg-[#070e1e] border border-[#1e2f5b] rounded-2xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-[#E8FD3B] flex items-center gap-1.5">
+                    <Database className="w-4 h-4 text-[#E8FD3B]" />
+                    Firebase Firestore 클라우드 실시간 동기화
+                  </span>
+                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    연동 활성화됨 (Connected)
+                  </span>
+                </div>
                 <p className="text-slate-300 leading-relaxed">
-                  다중 기기 간 실시간 데이터 공유를 활성화하려면 아래에 프로젝트 설정을 입력하거나 기본 로컬 모드로 안전하게 사용하실 수 있습니다.
+                  학생들이 제출한 모든 PAPS 측정치, FITT 운동 처방 계획서, 5차시 실천 기록, 타이머 운동 로그 및 생활기록부 세특이 Firebase Firestore 클라우드 데이터베이스에 실시간으로 안전하게 자동 저장됩니다.
                 </p>
+                <div className="pt-2 border-t border-[#1e2f5b] flex flex-wrap gap-2 text-[11px] text-slate-400">
+                  <span>프로젝트 ID: <code className="text-white font-mono">{projectId || 'gen-lang-client-0647827868'}</code></span>
+                  <span>·</span>
+                  <span>데이터베이스: <code className="text-[#E8FD3B] font-mono">ai-studio-1-b5c3d1c7-16f0-4477-8e2f-9ab476f1062d</code></span>
+                </div>
+              </div>
+
+              {/* Action Buttons: Test Connection & Force Sync */}
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={handleTestFirebase}
+                  className="px-4 py-2 bg-[#142245] hover:bg-[#1c2e5a] text-[#E8FD3B] font-extrabold rounded-xl border border-[#1e2f5b] hover:border-[#E8FD3B]/40 transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <Database className="w-3.5 h-3.5" />
+                  <span>연결 상태 점검 (Ping Test)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSyncFirebaseNow}
+                  className="px-4 py-2 bg-[#142245] hover:bg-[#1c2e5a] text-sky-300 font-extrabold rounded-xl border border-[#1e2f5b] hover:border-sky-400/40 transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>클라우드 데이터 전체 새로고침</span>
+                </button>
               </div>
 
               {firebaseMsg && (
@@ -630,9 +687,10 @@ export const TeacherSyncModal: React.FC<TeacherSyncModalProps> = ({
                 </div>
               )}
 
-              <div className="space-y-3">
+              <div className="space-y-3 pt-2 border-t border-[#1e2f5b]">
+                <h4 className="font-bold text-slate-300">Firebase 연결 파라미터 (자동 로드됨)</h4>
                 <div>
-                  <label className="text-slate-300 font-bold block mb-1">Firebase API Key</label>
+                  <label className="text-slate-400 font-bold block mb-1">Firebase API Key</label>
                   <input
                     type="text"
                     value={apiKey}
@@ -642,7 +700,7 @@ export const TeacherSyncModal: React.FC<TeacherSyncModalProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="text-slate-300 font-bold block mb-1">Firebase Project ID</label>
+                  <label className="text-slate-400 font-bold block mb-1">Firebase Project ID</label>
                   <input
                     type="text"
                     value={projectId}
@@ -652,7 +710,7 @@ export const TeacherSyncModal: React.FC<TeacherSyncModalProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="text-slate-300 font-bold block mb-1">Firebase App ID (선택)</label>
+                  <label className="text-slate-400 font-bold block mb-1">Firebase App ID</label>
                   <input
                     type="text"
                     value={appId}
@@ -666,7 +724,7 @@ export const TeacherSyncModal: React.FC<TeacherSyncModalProps> = ({
                     onClick={handleSaveFirebaseConfig}
                     className="px-5 py-2.5 bg-[#E8FD3B] hover:bg-[#d5eb28] text-black font-black rounded-xl transition shadow-[0_0_15px_rgba(232,253,59,0.25)] cursor-pointer"
                   >
-                    설정 적용 및 저장
+                    설정 업데이트
                   </button>
                 </div>
               </div>

@@ -142,7 +142,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
               </span>
             </div>
             <h1 className="text-base sm:text-lg font-black tracking-tight text-white mt-0.5">
-              paps&fitt
+              PAPS 체력증진 수행평가
             </h1>
           </div>
         </div>
@@ -177,8 +177,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
             <span>신안해양과학고등학교 1학년 체육 수업 맞춤형 플랫폼</span>
           </div>
           <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight leading-tight">
-            체계적인 <span className="text-[#E8FD3B]">PAPS 체력 진단</span>과{' '}
-            <span className="text-sky-400">5차시 FITT 처방 루틴</span>
+            <span className="text-[#E8FD3B]">PAPS 체력증진 수행평가</span>
           </h2>
           <p className="text-xs sm:text-sm text-slate-400 mt-2 leading-relaxed">
             나만의 체력 등급을 분석하고, 8개 고정 본운동 인터벌 타이머를 실천하며 성장 기록을 관리하세요.
@@ -456,7 +455,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
       {/* Footer */}
       <footer className="border-t border-[#1e2f5b] bg-[#070e1e] py-4 px-6 text-center text-[11px] text-slate-500">
         <p>
-          신안해양과학고등학교 1학년 체육과 교육과정 | 2022 개정 교육과정 기반 PAPS & 5차시 맞춤형 FITT 처방 시스템
+          신안해양과학고등학교 1학년 체육과 교육과정 | 2022 개정 교육과정 기반 PAPS 체력증진 수행평가
         </p>
       </footer>
     </div>

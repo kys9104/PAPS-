@@ -147,7 +147,7 @@ export const PapsTab: React.FC<PapsTabProps> = ({
       neisNote: neis.summary
     };
 
-    savePapsRecord(newRecord);
+    await savePapsRecord(newRecord);
     onSaveSuccess(newRecord);
 
     try {

@@ -1,0 +1,129 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default-deny catch-all (First rule block)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidStudent(data) {
+      return data.keys().hasOnly(['id', 'grade', 'classNum', 'studentNum', 'name', 'pin', 'gender', 'joinedAt', 'lastLoginAt', 'paps_results', 'fitt_records', 'checklist', 'updatedAt'])
+        && (!('id' in data) || (data.id is string && data.id.size() <= 64))
+        && (!('grade' in data) || data.grade is number)
+        && (!('classNum' in data) || data.classNum is number)
+        && (!('studentNum' in data) || data.studentNum is number)
+        && (!('name' in data) || (data.name is string && data.name.size() <= 100))
+        && (!('pin' in data) || (data.pin is string && data.pin.size() <= 16))
+        && (!('gender' in data) || (data.gender in ['남', '여']));
+    }
+
+    function isValidPapsRecord(data) {
+      return data.keys().hasAll(['id', 'studentId', 'date'])
+        && data.keys().hasOnly(['id', 'studentId', 'date', 'isGoal', 'gender', 'cardio', 'flexibility', 'strength', 'agility', 'bodyComp', 'totalScore', 'overallGrade', 'teacherFeedback', 'neisNote', 'updatedAt'])
+        && data.id is string && data.id.size() <= 128
+        && data.studentId is string && data.studentId.size() <= 64
+        && data.date is string && data.date.size() <= 64
+        && (!('teacherFeedback' in data) || (data.teacherFeedback is string && data.teacherFeedback.size() <= 2000))
+        && (!('neisNote' in data) || (data.neisNote is string && data.neisNote.size() <= 3000));
+    }
+
+    function isValidFittPlan(data) {
+      return data.keys().hasAll(['studentId'])
+        && data.keys().hasOnly(['studentId', 'updatedAt', 'frequency', 'intensity', 'time', 'type', 'setsCount', 'selfAnalysis', 'goalStatement', 'principlesChecklist'])
+        && data.studentId is string && data.studentId.size() <= 64
+        && (!('frequency' in data) || (data.frequency is string && data.frequency.size() <= 500))
+        && (!('intensity' in data) || (data.intensity is string && data.intensity.size() <= 500))
+        && (!('time' in data) || (data.time is string && data.time.size() <= 500))
+        && (!('type' in data) || (data.type is string && data.type.size() <= 500))
+        && (!('selfAnalysis' in data) || (data.selfAnalysis is string && data.selfAnalysis.size() <= 2000))
+        && (!('goalStatement' in data) || (data.goalStatement is string && data.goalStatement.size() <= 2000));
+    }
+
+    function isValidLessonPlanWrapper(data) {
+      return data.keys().hasAll(['studentId', 'plans'])
+        && data.keys().hasOnly(['studentId', 'plans', 'updatedAt'])
+        && data.studentId is string && data.studentId.size() <= 64
+        && data.plans is list && data.plans.size() <= 10;
+    }
+
+    function isValidWorkoutLog(data) {
+      return data.keys().hasAll(['id', 'studentId', 'exerciseName'])
+        && data.keys().hasOnly(['id', 'studentId', 'studentName', 'date', 'exerciseName', 'category', 'durationMinutes', 'sets', 'reps', 'rpe', 'memo', 'notes', 'updatedAt'])
+        && data.id is string && data.id.size() <= 128
+        && data.studentId is string && data.studentId.size() <= 64
+        && data.exerciseName is string && data.exerciseName.size() <= 200
+        && (!('durationMinutes' in data) || (data.durationMinutes is number && data.durationMinutes >= 0 && data.durationMinutes <= 1440))
+        && (!('rpe' in data) || (data.rpe is number && data.rpe >= 1 && data.rpe <= 10))
+        && (!('memo' in data) || (data.memo is string && data.memo.size() <= 2000));
+    }
+
+    function isValidNeisNote(data) {
+      return data.keys().hasAll(['studentId', 'note'])
+        && data.keys().hasOnly(['studentId', 'note', 'updatedAt'])
+        && data.studentId is string && data.studentId.size() <= 64
+        && data.note is string && data.note.size() <= 4000;
+    }
+
+    function isValidTestDoc(data) {
+      return data.keys().hasOnly(['timestamp'])
+        && (!('timestamp' in data) || (data.timestamp is string && data.timestamp.size() <= 64));
+    }
+
+    // Match rules for collections
+    match /students/{studentId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(studentId) && isValidStudent(incoming());
+      allow delete: if isValidId(studentId);
+    }
+
+    match /paps_records/{recordId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(recordId) && isValidPapsRecord(incoming());
+      allow delete: if isValidId(recordId);
+    }
+
+    match /fitt_plans/{studentId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(studentId) && isValidFittPlan(incoming());
+      allow delete: if isValidId(studentId);
+    }
+
+    match /lesson_plans/{studentId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(studentId) && isValidLessonPlanWrapper(incoming());
+      allow delete: if isValidId(studentId);
+    }
+
+    match /workout_logs/{logId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(logId) && isValidWorkoutLog(incoming());
+      allow delete: if isValidId(logId);
+    }
+
+    match /neis_notes/{studentId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(studentId) && isValidNeisNote(incoming());
+      allow delete: if isValidId(studentId);
+    }
+
+    match /test/{connection} {
+      allow get, list: if true;
+      allow write: if isValidId(connection) && isValidTestDoc(incoming());
+    }
+  }
+}

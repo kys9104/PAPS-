@@ -1,0 +1,141 @@
+{
+  "entities": {
+    "StudentProfile": {
+      "title": "StudentProfile",
+      "description": "Individual student profile and credentials in Shinan Marine High School",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64 },
+        "grade": { "type": "number" },
+        "classNum": { "type": "number" },
+        "studentNum": { "type": "number" },
+        "name": { "type": "string", "maxLength": 100 },
+        "pin": { "type": "string", "maxLength": 16 },
+        "gender": { "type": "string", "enum": ["남", "여"] },
+        "joinedAt": { "type": "string", "maxLength": 64 },
+        "lastLoginAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "grade", "classNum", "studentNum", "name"]
+    },
+    "PAPSRecord": {
+      "title": "PAPSRecord",
+      "description": "Student PAPS physical fitness test record and evaluation",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "studentId": { "type": "string", "maxLength": 64 },
+        "date": { "type": "string", "maxLength": 64 },
+        "isGoal": { "type": "boolean" },
+        "gender": { "type": "string", "enum": ["남", "여"] },
+        "cardio": { "type": "object" },
+        "flexibility": { "type": "object" },
+        "strength": { "type": "object" },
+        "agility": { "type": "object" },
+        "bodyComp": { "type": "object" },
+        "totalScore": { "type": "number" },
+        "overallGrade": { "type": "number" },
+        "teacherFeedback": { "type": "string", "maxLength": 2000 },
+        "neisNote": { "type": "string", "maxLength": 3000 }
+      },
+      "required": ["id", "studentId", "date"]
+    },
+    "FITTPlan": {
+      "title": "FITTPlan",
+      "description": "Individual customized FITT physical exercise prescription",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 },
+        "frequency": { "type": "string", "maxLength": 500 },
+        "intensity": { "type": "string", "maxLength": 500 },
+        "time": { "type": "string", "maxLength": 500 },
+        "type": { "type": "string", "maxLength": 500 },
+        "setsCount": { "type": "number" },
+        "selfAnalysis": { "type": "string", "maxLength": 2000 },
+        "goalStatement": { "type": "string", "maxLength": 2000 },
+        "principlesChecklist": { "type": "object" }
+      },
+      "required": ["studentId"]
+    },
+    "LessonPlanWrapper": {
+      "title": "LessonPlanWrapper",
+      "description": "5-week student lesson and interval circuit workout plans",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string", "maxLength": 64 },
+        "plans": { "type": "array" },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["studentId", "plans"]
+    },
+    "WorkoutLog": {
+      "title": "WorkoutLog",
+      "description": "Real-time timer workout execution log entry",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "studentId": { "type": "string", "maxLength": 64 },
+        "studentName": { "type": "string", "maxLength": 100 },
+        "date": { "type": "string", "maxLength": 64 },
+        "exerciseName": { "type": "string", "maxLength": 200 },
+        "category": { "type": "string", "maxLength": 100 },
+        "durationMinutes": { "type": "number" },
+        "sets": { "type": "number" },
+        "reps": { "type": "number" },
+        "rpe": { "type": "number" },
+        "memo": { "type": "string", "maxLength": 2000 },
+        "notes": { "type": "string", "maxLength": 2000 }
+      },
+      "required": ["id", "studentId", "exerciseName"]
+    },
+    "NeisNote": {
+      "title": "NeisNote",
+      "description": "School record behavioral assessment comments",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string", "maxLength": 64 },
+        "note": { "type": "string", "maxLength": 4000 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["studentId", "note"]
+    },
+    "TestDoc": {
+      "title": "TestDoc",
+      "description": "Validation ping document for Firestore connectivity testing",
+      "type": "object",
+      "properties": {
+        "timestamp": { "type": "string", "maxLength": 64 }
+      }
+    }
+  },
+  "firestore": {
+    "/students/{studentId}": {
+      "schema": "StudentProfile",
+      "description": "Individual student profile and authentication records"
+    },
+    "/paps_records/{recordId}": {
+      "schema": "PAPSRecord",
+      "description": "PAPS measurement and physical grade records"
+    },
+    "/fitt_plans/{studentId}": {
+      "schema": "FITTPlan",
+      "description": "Customized FITT exercise prescription plans"
+    },
+    "/lesson_plans/{studentId}": {
+      "schema": "LessonPlanWrapper",
+      "description": "5-week lesson and interval circuit plans"
+    },
+    "/workout_logs/{logId}": {
+      "schema": "WorkoutLog",
+      "description": "Student interval workout exercise session logs"
+    },
+    "/neis_notes/{studentId}": {
+      "schema": "NeisNote",
+      "description": "Teacher and automated NEIS behavioral assessment notes"
+    },
+    "/test/{connection}": {
+      "schema": "TestDoc",
+      "description": "Firestore connection validation probe"
+    }
+  }
+}

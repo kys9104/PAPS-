@@ -77,7 +77,7 @@ export const Header: React.FC<HeaderProps> = ({
               </span>
             </div>
             <h1 className="text-base sm:text-lg font-black tracking-tight text-white mt-0.5 flex items-center gap-1.5">
-              <span>paps&fitt</span>
+              <span>PAPS 체력증진 수행평가</span>
               <span className="w-1.5 h-1.5 rounded-full bg-[#E8FD3B] animate-pulse"></span>
             </h1>
             <p className="text-[10px] text-slate-400 uppercase tracking-widest font-mono">

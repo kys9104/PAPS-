@@ -92,95 +92,12 @@ export default function App() {
     setWorkoutLogs(getStudentWorkoutLogs(activeStudent.id));
   };
 
-  // Initial Data Bootstrap: 기본 샘플 기록 시딩 (단, 학생을 임의로 자동 로그인시키지 않음)
+  // Initial Data Bootstrap
   useEffect(() => {
-    const sampleStudentId = '1-1-01';
-    const existingPaps = getStudentPapsRecords(sampleStudentId);
-
-    // 샘플 데이터가 전혀 없을 때 1-1-01용 초기 레코드만 조용히 백그라운드 시딩
-    if (existingPaps.length === 0) {
-      const samplePaps: PAPSRecord = {
-        id: `paps_sample_${sampleStudentId}`,
-        studentId: sampleStudentId,
-        date: new Date().toISOString().split('T')[0],
-        gender: '남',
-        cardio: {
-          testType: '왕복오래달리기',
-          value: 68,
-          unit: '회',
-          grade: 2,
-          score: 16
-        },
-        flexibility: {
-          testType: '앉아윗몸앞으로굽히기',
-          value: 16.5,
-          unit: 'cm',
-          grade: 1,
-          score: 20
-        },
-        strength: {
-          testType: '악력',
-          value: 45.5,
-          unit: 'kg',
-          grade: 2,
-          score: 16
-        },
-        agility: {
-          testType: '제자리멀리뛰기',
-          value: 235,
-          unit: 'cm',
-          grade: 2,
-          score: 16
-        },
-        bodyComp: {
-          height: 173,
-          weight: 64,
-          bmi: 21.4,
-          grade: 1,
-          score: 20,
-          status: '표준 (정상체중)'
-        },
-        totalScore: 88,
-        overallGrade: 1,
-        neisNote: ''
-      };
-      savePapsRecord(samplePaps);
-
-      const sampleFitt: FITTPlan = {
-        studentId: sampleStudentId,
-        updatedAt: new Date().toISOString(),
-        frequency: '주 4회 (월, 수, 금, 토 방과후)',
-        intensity: 'RPE 7~8 (약간 힘들다 / 심박수 145~165bpm)',
-        time: '1회당 45분 (워밍업 5분 + 본실습 35분 + 쿨다운 5분)',
-        type: '왕복오래달리기 인터벌 + 맨몸 하체/코어 스쿼트 & 플랭크',
-        selfAnalysis:
-          '심폐지구력과 신체조성은 1~2등급 수준이나 좌전굴 유연성이 다소 뻣뻣하여 후반부 스트레칭 보강이 필요함.',
-        goalStatement:
-          '5주간의 실천 계획을 통해 셔틀런 77회(1등급 만점) 돌파 및 좌전굴 19cm 이상 달성.',
-        principlesChecklist: {
-          overload: true,
-          progression: true,
-          specificity: true,
-          individuality: true,
-          continuity: true
-        }
-      };
-      saveStudentFittPlan(sampleFitt);
-      saveStudentLessonPlans(sampleStudentId, DEFAULT_LESSON_PLANS);
-
-      const sampleLog: WorkoutLog = {
-        id: `sample_log_1`,
-        studentId: sampleStudentId,
-        date: new Date().toISOString().split('T')[0],
-        exerciseName: '20m 셔틀런 인터벌 트레이닝',
-        category: '심폐지구력',
-        sets: 4,
-        reps: 20,
-        durationMinutes: 25,
-        rpe: 8,
-        memo: '목표 페이스를 유지하며 4세트를 전원 완주함'
-      };
-      saveWorkoutLog(sampleLog);
+    // 곽승준 학생의 예시 샘플 기록 잔여 데이터 정리
+    const rawPaps = localStorage.getItem('shinan_paps_records');
+    if (rawPaps && rawPaps.includes('paps_sample_1-1-01')) {
+      deletePapsRecord('paps_sample_1-1-01', '1-1-01');
     }
 
     // Firestore 데이터 동기화 백그라운드 호출

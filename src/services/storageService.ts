@@ -484,6 +484,21 @@ export async function saveStudentFittPlan(plan: FITTPlan): Promise<void> {
 }
 
 // 4. 5차시 운동 계획 관리
+export function getStudentSavedLessonPlans(studentId: string): LessonPlan[] | null {
+  try {
+    const raw = localStorage.getItem(`${STORAGE_KEYS.LESSON_PLANS}_${studentId}`);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch {
+    // fallback
+  }
+  return null;
+}
+
 export function getStudentLessonPlans(studentId: string): LessonPlan[] {
   try {
     const raw = localStorage.getItem(`${STORAGE_KEYS.LESSON_PLANS}_${studentId}`);
@@ -631,22 +646,100 @@ export async function updateStudentPin(
 }
 
 // 5-2. 체육교사용 기록 삭제 및 초기화 관리 함수
-export async function deletePapsRecord(recordIdOrStudentId: string, maybeRecordId?: string): Promise<void> {
-  const targetId = maybeRecordId || recordIdOrStudentId;
+export async function deletePapsRecord(recordIdOrStudentId: string, studentIdOrRecordId?: string): Promise<void> {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.PAPS_RECORDS);
     const allRecords: PAPSRecord[] = raw ? JSON.parse(raw) : [];
-    const filtered = allRecords.filter((r) => r.id !== targetId);
+
+    const param1 = (recordIdOrStudentId || '').trim();
+    const param2 = (studentIdOrRecordId || '').trim();
+
+    // 1. 대상 레코드 ID들과 대상 학생 ID 식별
+    let targetRecordIds: string[] = [];
+    let targetStudentId: string | undefined;
+
+    if (param1.match(/^\d+-\d+-\d+$/)) {
+      targetStudentId = param1;
+    } else if (param2.match(/^\d+-\d+-\d+$/)) {
+      targetStudentId = param2;
+    }
+
+    if (param1.startsWith('paps_')) {
+      targetRecordIds.push(param1);
+    }
+    if (param2.startsWith('paps_')) {
+      targetRecordIds.push(param2);
+    }
+
+    allRecords.forEach((r) => {
+      if (
+        (targetStudentId && r.studentId === targetStudentId) ||
+        r.id === param1 ||
+        r.id === param2 ||
+        (r.studentId && (r.studentId === param1 || r.studentId === param2))
+      ) {
+        if (!targetRecordIds.includes(r.id)) {
+          targetRecordIds.push(r.id);
+        }
+        if (!targetStudentId) {
+          targetStudentId = r.studentId;
+        }
+      }
+    });
+
+    if (targetRecordIds.length === 0 && param1) {
+      targetRecordIds.push(param1);
+    }
+
+    // 2. LocalStorage에서 해당 레코드들 및 대상 학생 레코드 일괄 제거
+    const filtered = allRecords.filter(
+      (r) =>
+        !targetRecordIds.includes(r.id) &&
+        (!targetStudentId || r.studentId !== targetStudentId)
+    );
     localStorage.setItem(STORAGE_KEYS.PAPS_RECORDS, JSON.stringify(filtered));
 
-    const papsPath = `paps_records/${targetId}`;
-    try {
-      await deleteDoc(doc(db, 'paps_records', targetId));
-    } catch (e) {
-      if (e instanceof Error && e.message.includes('insufficient permissions')) {
-        handleFirestoreError(e, OperationType.DELETE, papsPath);
+    // 3. Firestore paps_records 컬렉션에서 개별 문서 삭제
+    for (const rid of targetRecordIds) {
+      try {
+        await deleteDoc(doc(db, 'paps_records', rid));
+      } catch (e) {
+        console.warn('Firebase paps delete warning:', rid, e);
       }
-      console.warn('Firebase paps delete warning:', e);
+    }
+
+    // 대상 학생 ID가 있다면, Firestore paps_records 컬렉션에서 해당 studentId를 가진 문서 추가 전수 정리
+    if (targetStudentId) {
+      try {
+        const papsSnap = await getDocs(collection(db, 'paps_records'));
+        for (const docSnap of papsSnap.docs) {
+          const data = docSnap.data();
+          if (
+            data.studentId === targetStudentId ||
+            docSnap.id === `paps_sample_${targetStudentId}` ||
+            docSnap.id === `paps_${targetStudentId}` ||
+            docSnap.id.includes(targetStudentId)
+          ) {
+            await deleteDoc(doc(db, 'paps_records', docSnap.id));
+          }
+        }
+      } catch (err) {
+        console.warn('Firebase paps query delete warning:', err);
+      }
+
+      // 4. Firestore students 문서의 paps_results도 빈 배열로 초기화
+      try {
+        await setDoc(
+          doc(db, 'students', targetStudentId),
+          {
+            paps_results: [],
+            updatedAt: new Date().toISOString()
+          },
+          { merge: true }
+        );
+      } catch (e) {
+        console.warn('Firebase student paps_results cleanup warning:', e);
+      }
     }
   } catch (err) {
     console.error('Failed to delete PAPS record:', err);
@@ -654,23 +747,7 @@ export async function deletePapsRecord(recordIdOrStudentId: string, maybeRecordI
 }
 
 export async function deleteAllPapsRecordsForStudent(studentId: string): Promise<void> {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEYS.PAPS_RECORDS);
-    const allRecords: PAPSRecord[] = raw ? JSON.parse(raw) : [];
-    const toDelete = allRecords.filter((r) => r.studentId === studentId);
-    const filtered = allRecords.filter((r) => r.studentId !== studentId);
-    localStorage.setItem(STORAGE_KEYS.PAPS_RECORDS, JSON.stringify(filtered));
-
-    for (const r of toDelete) {
-      try {
-        await deleteDoc(doc(db, 'paps_records', r.id));
-      } catch (e) {
-        console.warn('Firebase individual paps delete warning:', e);
-      }
-    }
-  } catch (err) {
-    console.error('Failed to delete all PAPS records for student:', err);
-  }
+  return deletePapsRecord(studentId);
 }
 
 export async function deleteWorkoutLog(logIdOrStudentId: string, maybeLogId?: string): Promise<void> {

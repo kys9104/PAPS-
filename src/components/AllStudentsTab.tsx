@@ -22,7 +22,10 @@ import {
   RotateCcw,
   SlidersHorizontal,
   Table as TableIcon,
-  LayoutGrid
+  LayoutGrid,
+  Trash2,
+  Clock,
+  Sparkles
 } from 'lucide-react';
 import {
   StudentProfile,
@@ -30,7 +33,9 @@ import {
   CardioTest,
   FlexibilityTest,
   StrengthTest,
-  AgilityTest
+  AgilityTest,
+  FITTPlan,
+  LessonPlan
 } from '../types';
 import {
   PAPS_STANDARDS,
@@ -46,13 +51,18 @@ import {
   getAllPapsRecords,
   getStudentPapsRecords,
   savePapsRecord,
+  deletePapsRecord,
+  deleteAllPapsRecordsForStudent,
   getStudentLessonPlans,
+  getStudentSavedLessonPlans,
+  getStudentFittPlan,
   exportClassDataAsCsv,
   syncAllDataFromFirestore,
   STORAGE_KEYS
 } from '../services/storageService';
 import { db } from '../services/firebaseConfig';
 import { collection, onSnapshot } from 'firebase/firestore';
+import { StudentPlansModal } from './StudentPlansModal';
 
 interface AllStudentsTabProps {
   currentStudent: StudentProfile | null;
@@ -85,7 +95,7 @@ export const AllStudentsTab: React.FC<AllStudentsTabProps> = ({
       console.warn('AllStudentsTab Firestore initial sync:', err);
     });
 
-    // 2. PAPS 기록 및 학생 실시간 onSnapshot 구독
+    // 2. PAPS 기록, 학생 프로필, FITT 계획, 5차시 계획 실시간 onSnapshot 구독
     try {
       const papsUnsub = onSnapshot(collection(db, 'paps_records'), (snap) => {
         const records: PAPSRecord[] = [];
@@ -119,9 +129,36 @@ export const AllStudentsTab: React.FC<AllStudentsTabProps> = ({
         console.warn('Realtime students sync notice:', err);
       });
 
+      const fittUnsub = onSnapshot(collection(db, 'fitt_plans'), (snap) => {
+        const raw = localStorage.getItem(STORAGE_KEYS.FITT_PLANS);
+        const allPlans: Record<string, FITTPlan> = raw ? JSON.parse(raw) : {};
+        snap.forEach((d) => {
+          const plan = d.data() as FITTPlan;
+          if (plan && plan.studentId) allPlans[plan.studentId] = plan;
+        });
+        localStorage.setItem(STORAGE_KEYS.FITT_PLANS, JSON.stringify(allPlans));
+        setRefreshKey((k) => k + 1);
+      }, (err) => {
+        console.warn('Realtime fitt_plans sync notice:', err);
+      });
+
+      const lessonUnsub = onSnapshot(collection(db, 'lesson_plans'), (snap) => {
+        snap.forEach((d) => {
+          const data = d.data();
+          if (data && data.studentId && Array.isArray(data.plans)) {
+            localStorage.setItem(`${STORAGE_KEYS.LESSON_PLANS}_${data.studentId}`, JSON.stringify(data.plans));
+          }
+        });
+        setRefreshKey((k) => k + 1);
+      }, (err) => {
+        console.warn('Realtime lesson_plans sync notice:', err);
+      });
+
       return () => {
         papsUnsub();
         studentsUnsub();
+        fittUnsub();
+        lessonUnsub();
       };
     } catch (e) {
       console.warn('Failed to attach realtime listeners in AllStudentsTab:', e);
@@ -132,6 +169,7 @@ export const AllStudentsTab: React.FC<AllStudentsTabProps> = ({
   const [selectedClass, setSelectedClass] = useState<'all' | '1' | '2'>('all');
   const [selectedGender, setSelectedGender] = useState<'all' | '남' | '여'>('all');
   const [selectedGradeFilter, setSelectedGradeFilter] = useState<'all' | '1' | '2' | '3' | '4' | '5' | 'unmeasured'>('all');
+  const [selectedPlanFilter, setSelectedPlanFilter] = useState<'all' | 'submitted' | 'unsubmitted'>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortBy, setSortBy] = useState<'number' | 'score-desc' | 'score-asc' | 'name'>('number');
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
@@ -139,6 +177,7 @@ export const AllStudentsTab: React.FC<AllStudentsTabProps> = ({
   // 모달 상태
   const [editingStudent, setEditingStudent] = useState<StudentProfile | null>(null);
   const [viewingStudent, setViewingStudent] = useState<StudentProfile | null>(null);
+  const [inspectingPlanStudent, setInspectingPlanStudent] = useState<StudentProfile | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -151,6 +190,20 @@ export const AllStudentsTab: React.FC<AllStudentsTabProps> = ({
     setAllStudents(getAllStudents());
     setAllPapsRecords(getAllPapsRecords());
     setRefreshKey((prev) => prev + 1);
+  };
+
+  // 체육교사 권한: 학생의 PAPS 측정 기록 삭제 및 미측정 초기화
+  const handleDeletePapsRecordForStudent = async (targetStudent: StudentProfile, recordId?: string) => {
+    if (
+      window.confirm(
+        `정말로 [${targetStudent.name}] 학생의 PAPS 측정 기록을 삭제하시겠습니까?\n\n삭제 시 해당 학생의 기록은 '미측정' 상태로 초기화되며, 클라우드(파이어베이스) 및 로컬 기록실에서 영구 삭제됩니다.`
+      )
+    ) {
+      await deletePapsRecord(recordId || targetStudent.id, targetStudent.id);
+      await deleteAllPapsRecordsForStudent(targetStudent.id);
+      refreshData();
+      showToast(`${targetStudent.name} 학생의 PAPS 기록이 성공적으로 삭제(초기화)되었습니다.`);
+    }
   };
 
   // 학생별 최신 PAPS 레코드 맵
@@ -174,6 +227,26 @@ export const AllStudentsTab: React.FC<AllStudentsTabProps> = ({
       const plans = getStudentLessonPlans(s.id);
       const count = plans.filter((p) => p.isCompleted).length;
       map.set(s.id, count);
+    });
+    return map;
+  }, [allStudents, refreshKey]);
+
+  // 학생별 FITT 계획 맵
+  const studentFittMap = useMemo(() => {
+    const map = new Map<string, FITTPlan>();
+    allStudents.forEach((s) => {
+      const p = getStudentFittPlan(s.id);
+      if (p) map.set(s.id, p);
+    });
+    return map;
+  }, [allStudents, refreshKey]);
+
+  // 학생별 실제 저장된 5차시 계획서 맵
+  const studentSavedLessonsMap = useMemo(() => {
+    const map = new Map<string, LessonPlan[]>();
+    allStudents.forEach((s) => {
+      const plans = getStudentSavedLessonPlans(s.id);
+      if (plans) map.set(s.id, plans);
     });
     return map;
   }, [allStudents, refreshKey]);
@@ -204,6 +277,22 @@ export const AllStudentsTab: React.FC<AllStudentsTabProps> = ({
 
     const averageScore = measuredCount > 0 ? (totalScoreSum / measuredCount).toFixed(1) : '0';
 
+    const fittCompletedCount = allStudents.filter((s) => {
+      const f = studentFittMap.get(s.id);
+      return Boolean(f && (f.goalStatement || f.frequency));
+    }).length;
+
+    const lessonsPlannedCount = allStudents.filter((s) => {
+      const l = studentSavedLessonsMap.get(s.id);
+      return Boolean(l && l.length > 0);
+    }).length;
+
+    const planSubmittedCount = allStudents.filter((s) => {
+      const f = studentFittMap.get(s.id);
+      const l = studentSavedLessonsMap.get(s.id);
+      return Boolean((f && (f.goalStatement || f.frequency)) || (l && l.length > 0));
+    }).length;
+
     return {
       totalCount,
       measuredCount,
@@ -214,9 +303,12 @@ export const AllStudentsTab: React.FC<AllStudentsTabProps> = ({
       grade3Count,
       grade4Count,
       grade5Count,
-      averageScore
+      averageScore,
+      fittCompletedCount,
+      lessonsPlannedCount,
+      planSubmittedCount
     };
-  }, [allStudents, studentPapsMap]);
+  }, [allStudents, studentPapsMap, studentFittMap, studentSavedLessonsMap]);
 
   // 필터링 및 정렬된 학생 목록
   const filteredStudents = useMemo(() => {
@@ -235,6 +327,15 @@ export const AllStudentsTab: React.FC<AllStudentsTabProps> = ({
           if (paps) return false;
         } else if (selectedGradeFilter !== 'all') {
           if (!paps || paps.overallGrade !== Number(selectedGradeFilter)) return false;
+        }
+
+        // 계획 작성 여부 필터
+        if (selectedPlanFilter !== 'all') {
+          const f = studentFittMap.get(s.id);
+          const l = studentSavedLessonsMap.get(s.id);
+          const hasPlan = Boolean((f && (f.goalStatement || f.frequency)) || (l && l.length > 0));
+          if (selectedPlanFilter === 'submitted' && !hasPlan) return false;
+          if (selectedPlanFilter === 'unsubmitted' && hasPlan) return false;
         }
 
         // 검색어
@@ -276,9 +377,12 @@ export const AllStudentsTab: React.FC<AllStudentsTabProps> = ({
     selectedClass,
     selectedGender,
     selectedGradeFilter,
+    selectedPlanFilter,
     searchQuery,
     sortBy,
-    studentPapsMap
+    studentPapsMap,
+    studentFittMap,
+    studentSavedLessonsMap
   ]);
 
   // CSV 다운로드 핸들러
@@ -411,7 +515,7 @@ export const AllStudentsTab: React.FC<AllStudentsTabProps> = ({
       </div>
 
       {/* KPI Stats Summary Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <div className="bg-[#0d172e] rounded-3xl border border-[#1e2f5b] p-5 shadow-xl space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-slate-400">1학년 전교생 현황</span>
@@ -480,6 +584,29 @@ export const AllStudentsTab: React.FC<AllStudentsTabProps> = ({
           <div className="text-[11px] text-slate-400">
             미측정: <strong className="text-amber-400">{stats.unmeasuredCount}명</strong>
           </div>
+        </div>
+
+        {/* 5th Card: Plan Written Status at a glance */}
+        <div className="bg-[#0d172e] rounded-3xl border border-[#1e2f5b] p-5 shadow-xl space-y-2 col-span-2 lg:col-span-1">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-400">운동처방 & 계획 수립</span>
+            <BookOpen className="w-4 h-4 text-[#E8FD3B]" />
+          </div>
+          <div className="space-y-1">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-slate-300">FITT 처방:</span>
+              <span className="font-bold text-[#E8FD3B] font-mono">
+                {stats.fittCompletedCount}/{stats.totalCount}명 ({Math.round((stats.fittCompletedCount / stats.totalCount) * 100)}%)
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-slate-300">5차시 계획:</span>
+              <span className="font-bold text-sky-400 font-mono">
+                {stats.lessonsPlannedCount}/{stats.totalCount}명 ({Math.round((stats.lessonsPlannedCount / stats.totalCount) * 100)}%)
+              </span>
+            </div>
+          </div>
+          <div className="text-[11px] text-slate-400">학생 자율 작성 실시간 집계</div>
         </div>
       </div>
 
@@ -623,33 +750,59 @@ export const AllStudentsTab: React.FC<AllStudentsTabProps> = ({
           </div>
         </div>
 
-        {/* Grade Pills Filter */}
-        <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-[#1e2f5b]/60">
-          <span className="text-[11px] font-bold text-slate-400 mr-1">등급 필터:</span>
-          {[
-            { key: 'all', label: '전체 등급' },
-            { key: '1', label: '1등급' },
-            { key: '2', label: '2등급' },
-            { key: '3', label: '3등급' },
-            { key: '4', label: '4등급' },
-            { key: '5', label: '5등급' },
-            { key: 'unmeasured', label: '미측정' }
-          ].map((item) => (
-            <button
-              key={item.key}
-              onClick={() => setSelectedGradeFilter(item.key as any)}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
-                selectedGradeFilter === item.key
-                  ? 'bg-[#142245] text-[#E8FD3B] border border-[#E8FD3B]/50'
-                  : 'bg-[#070e1e] text-slate-400 hover:text-slate-200 border border-[#1e2f5b]'
-              }`}
-            >
-              {item.label}
-            </button>
-          ))}
-          <span className="text-[11px] text-slate-500 ml-auto">
-            조회 결과: <strong className="text-white font-mono">{filteredStudents.length}</strong>명
-          </span>
+        {/* Grade Pills Filter & Plan Submission Filter */}
+        <div className="flex flex-col gap-2 pt-2 border-t border-[#1e2f5b]/60">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] font-bold text-slate-400 mr-1">등급 필터:</span>
+            {[
+              { key: 'all', label: '전체 등급' },
+              { key: '1', label: '1등급' },
+              { key: '2', label: '2등급' },
+              { key: '3', label: '3등급' },
+              { key: '4', label: '4등급' },
+              { key: '5', label: '5등급' },
+              { key: 'unmeasured', label: '미측정' }
+            ].map((item) => (
+              <button
+                key={item.key}
+                onClick={() => setSelectedGradeFilter(item.key as any)}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                  selectedGradeFilter === item.key
+                    ? 'bg-[#142245] text-[#E8FD3B] border border-[#E8FD3B]/50'
+                    : 'bg-[#070e1e] text-slate-400 hover:text-slate-200 border border-[#1e2f5b]'
+                }`}
+              >
+                {item.label}
+              </button>
+            ))}
+            <span className="text-[11px] text-slate-500 ml-auto">
+              조회 결과: <strong className="text-white font-mono">{filteredStudents.length}</strong>명
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-[#1e2f5b]/30">
+            <span className="text-[11px] font-bold text-slate-400 mr-1 flex items-center gap-1">
+              <BookOpen className="w-3 h-3 text-[#E8FD3B]" />
+              <span>계획 작성 상태:</span>
+            </span>
+            {[
+              { key: 'all', label: '전체 학생' },
+              { key: 'submitted', label: `계획 수립 완료 (${stats.planSubmittedCount}명)` },
+              { key: 'unsubmitted', label: `계획 미작성 (${stats.totalCount - stats.planSubmittedCount}명)` }
+            ].map((item) => (
+              <button
+                key={item.key}
+                onClick={() => setSelectedPlanFilter(item.key as any)}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                  selectedPlanFilter === item.key
+                    ? 'bg-[#142245] text-[#E8FD3B] border border-[#E8FD3B]/50'
+                    : 'bg-[#070e1e] text-slate-400 hover:text-slate-200 border border-[#1e2f5b]'
+                }`}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -680,13 +833,14 @@ export const AllStudentsTab: React.FC<AllStudentsTabProps> = ({
                     </div>
                   </th>
                   <th className="py-3.5 px-3 text-center">5차시 실천</th>
+                  <th className="py-3.5 px-3 text-center">계획 작성 여부</th>
                   <th className="py-3.5 px-4 text-center">관리·조회</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#1e2f5b]/60">
                 {filteredStudents.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="py-12 text-center text-slate-400 text-sm">
+                    <td colSpan={12} className="py-12 text-center text-slate-400 text-sm">
                       조건에 일치하는 학생이 없습니다.
                     </td>
                   </tr>
@@ -694,6 +848,10 @@ export const AllStudentsTab: React.FC<AllStudentsTabProps> = ({
                   filteredStudents.map((s) => {
                     const paps = studentPapsMap.get(s.id);
                     const lessonCount = studentLessonCountMap.get(s.id) || 0;
+                    const fitt = studentFittMap.get(s.id);
+                    const hasFitt = Boolean(fitt && (fitt.goalStatement || fitt.frequency));
+                    const savedLessons = studentSavedLessonsMap.get(s.id);
+                    const hasCustomLessons = Boolean(savedLessons && savedLessons.length > 0);
                     const isSelf = currentStudent?.id === s.id;
 
                     return (
@@ -867,27 +1025,97 @@ export const AllStudentsTab: React.FC<AllStudentsTabProps> = ({
                           </span>
                         </td>
 
+                        {/* Plan Submission Status (FITT & 5-Week Lessons) */}
+                        <td className="py-3 px-3 text-center whitespace-nowrap">
+                          {hasFitt && hasCustomLessons ? (
+                            <button
+                              onClick={() => setInspectingPlanStudent(s)}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30 transition cursor-pointer"
+                              title="FITT 처방 및 5차시 계획서 모두 수립 완료 (클릭 시 세부 내용 열람)"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                              <span>전체 수립</span>
+                            </button>
+                          ) : hasFitt ? (
+                            <button
+                              onClick={() => setInspectingPlanStudent(s)}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-sky-500/20 text-sky-300 border border-sky-500/40 hover:bg-sky-500/30 transition cursor-pointer"
+                              title="FITT 처방 수립 완료 (5차시 계획 기본) - 클릭 시 세부 내용 열람"
+                            >
+                              <Sparkles className="w-3 h-3 text-sky-400" />
+                              <span>FITT 작성</span>
+                            </button>
+                          ) : hasCustomLessons ? (
+                            <button
+                              onClick={() => setInspectingPlanStudent(s)}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 hover:bg-indigo-500/30 transition cursor-pointer"
+                              title="5차시 계획 수립 완료 - 클릭 시 세부 내용 열람"
+                            >
+                              <BookOpen className="w-3 h-3 text-indigo-400" />
+                              <span>5차시 작성</span>
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => setInspectingPlanStudent(s)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-[#070e1e] text-slate-500 border border-[#1e2f5b] hover:text-slate-300 hover:border-slate-500 transition cursor-pointer"
+                              title="아직 체력 계획서를 작성하지 않았습니다. (클릭 시 상태 확인)"
+                            >
+                              <AlertCircle className="w-3 h-3 text-slate-500" />
+                              <span>미작성</span>
+                            </button>
+                          )}
+                        </td>
+
                         {/* Action Buttons: Teacher vs Student */}
                         <td className="py-3 px-4 text-center whitespace-nowrap">
                           <div className="flex items-center justify-center gap-1.5">
                             {isTeacher ? (
-                              <button
-                                onClick={() => setEditingStudent(s)}
-                                className="px-2.5 py-1.5 rounded-xl bg-[#E8FD3B] hover:bg-[#d5eb28] text-black text-[11px] font-black flex items-center gap-1 transition shadow-xs cursor-pointer"
-                                title="체육교사 권한: PAPS 측정치 직접 수정 및 반영"
-                              >
-                                <PenTool className="w-3 h-3" />
-                                <span>기록 수정</span>
-                              </button>
+                              <>
+                                <button
+                                  onClick={() => setEditingStudent(s)}
+                                  className="px-2.5 py-1.5 rounded-xl bg-[#E8FD3B] hover:bg-[#d5eb28] text-black text-[11px] font-black flex items-center gap-1 transition shadow-xs cursor-pointer"
+                                  title="체육교사 권한: PAPS 측정치 직접 입력/수정"
+                                >
+                                  <PenTool className="w-3 h-3" />
+                                  <span>기록 수정</span>
+                                </button>
+                                <button
+                                  onClick={() => setInspectingPlanStudent(s)}
+                                  className="px-2 py-1.5 rounded-xl bg-[#142245] hover:bg-[#1e3264] text-sky-300 border border-sky-500/30 text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
+                                  title="학생의 FITT 운동처방 및 5차시 계획서 한눈에 열람"
+                                >
+                                  <BookOpen className="w-3 h-3" />
+                                  <span>계획서</span>
+                                </button>
+                                {paps && (
+                                  <button
+                                    onClick={() => handleDeletePapsRecordForStudent(s, paps.id)}
+                                    className="p-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 border border-rose-500/30 text-[11px] transition cursor-pointer"
+                                    title={`${s.name} 학생의 PAPS 측정 기록 삭제 (미측정으로 초기화)`}
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </>
                             ) : (
-                              <button
-                                onClick={() => setViewingStudent(s)}
-                                className="px-2.5 py-1.5 rounded-xl bg-[#142245] hover:bg-[#1e3264] text-sky-300 border border-sky-500/30 text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
-                                title="학생 조회 전용: 상세 성취도 열람"
-                              >
-                                <Eye className="w-3 h-3" />
-                                <span>상세 조회</span>
-                              </button>
+                              <>
+                                <button
+                                  onClick={() => setViewingStudent(s)}
+                                  className="px-2.5 py-1.5 rounded-xl bg-[#142245] hover:bg-[#1e3264] text-sky-300 border border-sky-500/30 text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
+                                  title="학생 조회 전용: 상세 성취도 열람"
+                                >
+                                  <Eye className="w-3 h-3" />
+                                  <span>상세 조회</span>
+                                </button>
+                                <button
+                                  onClick={() => setInspectingPlanStudent(s)}
+                                  className="px-2 py-1.5 rounded-xl bg-[#070e1e] hover:bg-[#142245] text-slate-300 border border-[#1e2f5b] text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
+                                  title="체력 계획서 열람"
+                                >
+                                  <BookOpen className="w-3 h-3" />
+                                  <span>계획서</span>
+                                </button>
+                              </>
                             )}
                           </div>
                         </td>
@@ -905,6 +1133,10 @@ export const AllStudentsTab: React.FC<AllStudentsTabProps> = ({
           {filteredStudents.map((s) => {
             const paps = studentPapsMap.get(s.id);
             const lessonCount = studentLessonCountMap.get(s.id) || 0;
+            const fitt = studentFittMap.get(s.id);
+            const hasFitt = Boolean(fitt && (fitt.goalStatement || fitt.frequency));
+            const savedLessons = studentSavedLessonsMap.get(s.id);
+            const hasCustomLessons = Boolean(savedLessons && savedLessons.length > 0);
             const isSelf = currentStudent?.id === s.id;
 
             return (
@@ -1015,6 +1247,37 @@ export const AllStudentsTab: React.FC<AllStudentsTabProps> = ({
                   </div>
                 )}
 
+                {/* Plan Submission Status in Card */}
+                <div className="bg-[#070e1e] p-3 rounded-2xl border border-[#1e2f5b] flex items-center justify-between text-xs">
+                  <span className="text-slate-400 text-[11px] flex items-center gap-1.5">
+                    <BookOpen className="w-3.5 h-3.5 text-[#E8FD3B]" />
+                    <span>체력 계획서:</span>
+                  </span>
+                  <button
+                    onClick={() => setInspectingPlanStudent(s)}
+                    className={`px-2.5 py-1 rounded-full text-[11px] font-black transition flex items-center gap-1 cursor-pointer ${
+                      hasFitt && hasCustomLessons
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30'
+                        : hasFitt
+                        ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 hover:bg-sky-500/30'
+                        : hasCustomLessons
+                        ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 hover:bg-indigo-500/30'
+                        : 'bg-[#0d172e] text-slate-500 border border-[#1e2f5b] hover:text-slate-300'
+                    }`}
+                  >
+                    <span>
+                      {hasFitt && hasCustomLessons
+                        ? '전체 수립 완료'
+                        : hasFitt
+                        ? 'FITT 작성 완료'
+                        : hasCustomLessons
+                        ? '5차시 작성 완료'
+                        : '계획 미작성'}
+                    </span>
+                    <ChevronRight className="w-3 h-3" />
+                  </button>
+                </div>
+
                 {/* Progress & Bottom Actions */}
                 <div className="pt-2 border-t border-[#1e2f5b]/80 flex items-center justify-between gap-2 text-xs">
                   <div className="flex items-center gap-2">
@@ -1024,21 +1287,50 @@ export const AllStudentsTab: React.FC<AllStudentsTabProps> = ({
 
                   <div className="flex items-center gap-1.5">
                     {isTeacher ? (
-                      <button
-                        onClick={() => setEditingStudent(s)}
-                        className="px-3 py-1.5 rounded-xl bg-[#E8FD3B] hover:bg-[#d5eb28] text-black text-xs font-black flex items-center gap-1 transition shadow-xs cursor-pointer"
-                      >
-                        <PenTool className="w-3 h-3" />
-                        <span>수정</span>
-                      </button>
+                      <>
+                        <button
+                          onClick={() => setEditingStudent(s)}
+                          className="px-2.5 py-1.5 rounded-xl bg-[#E8FD3B] hover:bg-[#d5eb28] text-black text-xs font-black flex items-center gap-1 transition shadow-xs cursor-pointer"
+                          title="기록 수정"
+                        >
+                          <PenTool className="w-3 h-3" />
+                          <span>수정</span>
+                        </button>
+                        <button
+                          onClick={() => setInspectingPlanStudent(s)}
+                          className="px-2 py-1.5 rounded-xl bg-[#142245] hover:bg-[#1e3264] text-sky-300 border border-sky-500/30 text-xs font-bold flex items-center gap-1 transition cursor-pointer"
+                          title="계획서 열람"
+                        >
+                          <BookOpen className="w-3 h-3" />
+                          <span>계획서</span>
+                        </button>
+                        {paps && (
+                          <button
+                            onClick={() => handleDeletePapsRecordForStudent(s, paps.id)}
+                            className="p-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 border border-rose-500/30 transition cursor-pointer"
+                            title="기록 삭제 (미측정 초기화)"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </>
                     ) : (
-                      <button
-                        onClick={() => setViewingStudent(s)}
-                        className="px-3 py-1.5 rounded-xl bg-[#142245] hover:bg-[#1e3264] text-sky-300 border border-sky-500/30 text-xs font-bold flex items-center gap-1 transition cursor-pointer"
-                      >
-                        <Eye className="w-3 h-3" />
-                        <span>조회</span>
-                      </button>
+                      <>
+                        <button
+                          onClick={() => setViewingStudent(s)}
+                          className="px-2.5 py-1.5 rounded-xl bg-[#142245] hover:bg-[#1e3264] text-sky-300 border border-sky-500/30 text-xs font-bold flex items-center gap-1 transition cursor-pointer"
+                        >
+                          <Eye className="w-3 h-3" />
+                          <span>조회</span>
+                        </button>
+                        <button
+                          onClick={() => setInspectingPlanStudent(s)}
+                          className="px-2 py-1.5 rounded-xl bg-[#070e1e] hover:bg-[#142245] text-slate-300 border border-[#1e2f5b] text-xs font-bold flex items-center gap-1 transition cursor-pointer"
+                        >
+                          <BookOpen className="w-3 h-3" />
+                          <span>계획서</span>
+                        </button>
+                      </>
                     )}
                   </div>
                 </div>
@@ -1059,6 +1351,11 @@ export const AllStudentsTab: React.FC<AllStudentsTabProps> = ({
             refreshData();
             showToast(`${editingStudent.name} 학생의 PAPS 기록이 성공적으로 수정·저장되었습니다!`);
           }}
+          onDeleteSuccess={() => {
+            setEditingStudent(null);
+            refreshData();
+            showToast(`${editingStudent.name} 학생의 PAPS 기록이 성공적으로 삭제(초기화)되었습니다!`);
+          }}
         />
       )}
 
@@ -1074,12 +1371,28 @@ export const AllStudentsTab: React.FC<AllStudentsTabProps> = ({
             setEditingStudent(viewingStudent);
             setViewingStudent(null);
           }}
+          onInspectPlans={() => {
+            setInspectingPlanStudent(viewingStudent);
+            setViewingStudent(null);
+          }}
           onOpenTeacherLogin={onOpenTeacherLogin}
           onNavigateNeis={() => {
             onSelectStudent(viewingStudent);
             onNavigateTab('dashboard');
             setViewingStudent(null);
           }}
+        />
+      )}
+
+      {/* Student Plans Modal (FITT & 5-Week Lessons Inspection for Teacher and Students) */}
+      {inspectingPlanStudent && (
+        <StudentPlansModal
+          student={inspectingPlanStudent}
+          fittPlan={studentFittMap.get(inspectingPlanStudent.id) || null}
+          lessonPlans={getStudentLessonPlans(inspectingPlanStudent.id)}
+          isCustomizedLessons={Boolean(studentSavedLessonsMap.get(inspectingPlanStudent.id))}
+          onClose={() => setInspectingPlanStudent(null)}
+          isTeacher={isTeacher}
         />
       )}
     </div>
@@ -1094,13 +1407,15 @@ interface EditPapsModalProps {
   currentRecord: PAPSRecord | null;
   onClose: () => void;
   onSaveSuccess: (record: PAPSRecord) => void;
+  onDeleteSuccess: () => void;
 }
 
 const EditPapsModal: React.FC<EditPapsModalProps> = ({
   student,
   currentRecord,
   onClose,
-  onSaveSuccess
+  onSaveSuccess,
+  onDeleteSuccess
 }) => {
   const gender = student.gender;
 
@@ -1204,6 +1519,19 @@ const EditPapsModal: React.FC<EditPapsModalProps> = ({
 
     await savePapsRecord(updatedRecord);
     onSaveSuccess(updatedRecord);
+  };
+
+  // 기록 삭제 처리
+  const handleDeleteRecord = async () => {
+    if (
+      window.confirm(
+        `정말로 [${student.name}] 학생의 PAPS 측정 기록을 삭제하시겠습니까?\n\n삭제 시 해당 학생은 '미측정' 상태로 초기화되며, 클라우드(파이어베이스) 및 로컬 기록실에서 영구 삭제됩니다.`
+      )
+    ) {
+      await deletePapsRecord(currentRecord?.id || student.id, student.id);
+      await deleteAllPapsRecordsForStudent(student.id);
+      onDeleteSuccess();
+    }
   };
 
   return (
@@ -1419,19 +1747,34 @@ const EditPapsModal: React.FC<EditPapsModalProps> = ({
 
         {/* Modal Actions */}
         <div className="flex items-center justify-between pt-3 border-t border-[#1e2f5b]">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 rounded-2xl bg-[#070e1e] hover:bg-[#142245] text-slate-400 hover:text-white border border-[#1e2f5b] text-xs font-bold transition cursor-pointer"
-          >
-            취소
-          </button>
-          <button
-            onClick={handleSave}
-            className="px-6 py-2.5 rounded-2xl bg-[#E8FD3B] hover:bg-[#d5eb28] text-black text-xs font-black flex items-center gap-2 transition shadow-[0_0_20px_rgba(232,253,59,0.25)] cursor-pointer"
-          >
-            <Save className="w-4 h-4" />
-            <span>수정사항 공식 반영 및 저장</span>
-          </button>
+          <div>
+            {currentRecord && (
+              <button
+                type="button"
+                onClick={handleDeleteRecord}
+                className="px-3.5 py-2 rounded-2xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 border border-rose-500/30 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+                title="PAPS 측정 기록 삭제 및 미측정으로 초기화"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>기록 삭제 (미측정 초기화)</span>
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 rounded-2xl bg-[#070e1e] hover:bg-[#142245] text-slate-400 hover:text-white border border-[#1e2f5b] text-xs font-bold transition cursor-pointer"
+            >
+              취소
+            </button>
+            <button
+              onClick={handleSave}
+              className="px-6 py-2.5 rounded-2xl bg-[#E8FD3B] hover:bg-[#d5eb28] text-black text-xs font-black flex items-center gap-2 transition shadow-[0_0_20px_rgba(232,253,59,0.25)] cursor-pointer"
+            >
+              <Save className="w-4 h-4" />
+              <span>수정사항 공식 반영 및 저장</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -1448,6 +1791,7 @@ interface ViewDetailModalProps {
   isTeacher: boolean;
   onClose: () => void;
   onSwitchToEdit: () => void;
+  onInspectPlans: () => void;
   onOpenTeacherLogin: () => void;
   onNavigateNeis: () => void;
 }
@@ -1459,6 +1803,7 @@ const ViewDetailModal: React.FC<ViewDetailModalProps> = ({
   isTeacher,
   onClose,
   onSwitchToEdit,
+  onInspectPlans,
   onOpenTeacherLogin,
   onNavigateNeis
 }) => {
@@ -1610,6 +1955,13 @@ const ViewDetailModal: React.FC<ViewDetailModalProps> = ({
           )}
 
           <div className="flex items-center justify-end gap-2 pt-1">
+            <button
+              onClick={onInspectPlans}
+              className="px-4 py-2 rounded-xl bg-[#142245] hover:bg-[#1e3264] text-sky-300 border border-sky-500/30 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+            >
+              <BookOpen className="w-3.5 h-3.5" />
+              <span>체력 계획서 열람</span>
+            </button>
             <button
               onClick={onNavigateNeis}
               className="px-4 py-2 rounded-xl bg-[#142245] hover:bg-[#1e3264] text-[#E8FD3B] border border-[#E8FD3B]/30 text-xs font-bold transition cursor-pointer"

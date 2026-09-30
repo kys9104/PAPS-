@@ -343,9 +343,25 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
               <Award className="w-5 h-5 text-[#E8FD3B]" />
               PAPS 종합 등급
             </h3>
-            <span className="px-3 py-1 bg-[#142245] text-[#E8FD3B] text-xs font-bold rounded-full border border-[#E8FD3B]/30">
-              {latestPaps ? `${latestPaps.date} 측정` : '측정 대기'}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="px-3 py-1 bg-[#142245] text-[#E8FD3B] text-xs font-bold rounded-full border border-[#E8FD3B]/30">
+                {latestPaps ? `${latestPaps.date} 측정` : '측정 대기'}
+              </span>
+              {isTeacher && latestPaps && onDeletePapsRecord && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm(`${student.name} 학생의 PAPS 측정 기록(${latestPaps.totalScore}점)을 삭제하시겠습니까?`)) {
+                      onDeletePapsRecord(latestPaps.id);
+                    }
+                  }}
+                  className="px-2.5 py-1 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 rounded-lg text-xs font-bold transition cursor-pointer"
+                  title="체육교사 권한: PAPS 측정 기록 삭제"
+                >
+                  기록 삭제
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="flex-1 flex flex-col justify-center items-center my-2">

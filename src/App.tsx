@@ -24,7 +24,8 @@ import {
   deleteWorkoutLog,
   getTeacherSettings,
   getAllStudents,
-  syncAllDataFromFirestore
+  syncAllDataFromFirestore,
+  ensureStudentProfilesUpToDate
 } from './services/storageService';
 import { Header } from './components/Header';
 import { AuthModal } from './components/AuthModal';
@@ -99,6 +100,9 @@ export default function App() {
     if (rawPaps && rawPaps.includes('paps_sample_1-1-01')) {
       deletePapsRecord('paps_sample_1-1-01', '1-1-01');
     }
+
+    // 최신 학생 명단 및 성별(홍서현, 조하얀 등) 보정 반영
+    ensureStudentProfilesUpToDate();
 
     // Firestore 데이터 동기화 백그라운드 호출
     syncAllDataFromFirestore().then(() => {

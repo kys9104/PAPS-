@@ -251,11 +251,11 @@ export function getAllStudents(): StudentProfile[] {
       const existing = existingMap.get(official.id);
       if (existing) {
         const effectivePin = (!existing.pin || existing.pin === '1234') ? '0000' : existing.pin;
-        if (effectivePin !== existing.pin) needsUpdate = true;
+        if (effectivePin !== existing.pin || existing.gender !== official.gender) needsUpdate = true;
         return {
           ...official,
           name: official.name,
-          gender: existing.gender || official.gender,
+          gender: official.gender,
           pin: effectivePin,
           joinedAt: existing.joinedAt || official.joinedAt,
           lastLoginAt: existing.lastLoginAt
@@ -938,11 +938,33 @@ export async function syncAllDataFromFirestore(): Promise<void> {
       const all = getAllStudents();
       const studentMap = new Map<string, StudentProfile>();
       all.forEach((s) => studentMap.set(s.id, s));
+      const officialMap = new Map(buildInitialStudentProfiles().map((s) => [s.id, s]));
+
       studentsSnap.forEach((d) => {
         const remote = d.data() as StudentProfile;
         if (remote && remote.id) {
           const current = studentMap.get(remote.id);
-          studentMap.set(remote.id, { ...current, ...remote });
+          const official = officialMap.get(remote.id);
+          const effectiveGender = official ? official.gender : (remote.gender || current?.gender || '남');
+          const effectiveName = official ? official.name : (remote.name || current?.name || '');
+
+          studentMap.set(remote.id, {
+            ...current,
+            ...remote,
+            gender: effectiveGender,
+            name: effectiveName
+          });
+
+          // Firestore에 성별이나 이름이 구버전으로 남아있으면 최신 명단 기준으로 원격 갱신
+          if (official && (remote.gender !== official.gender || remote.name !== official.name)) {
+            setDoc(
+              doc(db, 'students', remote.id),
+              { gender: official.gender, name: official.name, updatedAt: new Date().toISOString() },
+              { merge: true }
+            ).catch((err) => {
+              console.warn('Student profile correction sync notice:', err);
+            });
+          }
         }
       });
       localStorage.setItem(STORAGE_KEYS.ALL_STUDENTS, JSON.stringify(Array.from(studentMap.values())));
@@ -952,8 +974,21 @@ export async function syncAllDataFromFirestore(): Promise<void> {
     const papsSnap = await getDocs(collection(db, 'paps_records'));
     if (!papsSnap.empty) {
       const firestorePaps: PAPSRecord[] = [];
-      papsSnap.forEach((d) => firestorePaps.push(d.data() as PAPSRecord));
-      const localPaps = getAllPapsRecords();
+      papsSnap.forEach((d) => {
+        const rec = d.data() as PAPSRecord;
+        if (rec && rec.id) {
+          if (rec.studentId === '1-1-21' || rec.studentId === '1-2-17') {
+            rec.gender = '남';
+          }
+          firestorePaps.push(rec);
+        }
+      });
+      const localPaps = getAllPapsRecords().map((r) => {
+        if (r.studentId === '1-1-21' || r.studentId === '1-2-17') {
+          return { ...r, gender: '남' as const };
+        }
+        return r;
+      });
       const papsMap = new Map<string, PAPSRecord>();
       localPaps.forEach((p) => papsMap.set(p.id, p));
       firestorePaps.forEach((p) => papsMap.set(p.id, p));
@@ -1010,8 +1045,48 @@ export async function syncAllDataFromFirestore(): Promise<void> {
       });
       localStorage.setItem(STORAGE_KEYS.STUDENT_NEIS_NOTES, JSON.stringify(allNotes));
     }
+
+    // 학생 명단 및 성별 보정 동기화 실행
+    ensureStudentProfilesUpToDate();
   } catch (err) {
     console.warn('Initial Firestore sync notice:', err);
+  }
+}
+
+// 5-5. 학생 명단 및 성별 최신화 보장 함수 (홍서현, 조하얀 등 명단 변경 시 동기화)
+export function ensureStudentProfilesUpToDate(): void {
+  try {
+    const all = getAllStudents();
+    const targetIds = ['1-1-21', '1-2-17'];
+    targetIds.forEach((sid) => {
+      const st = all.find((s) => s.id === sid);
+      if (st && st.gender === '남') {
+        setDoc(doc(db, 'students', sid), { gender: '남', updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
+      }
+    });
+
+    const rawPaps = localStorage.getItem(STORAGE_KEYS.PAPS_RECORDS);
+    if (rawPaps) {
+      const records: PAPSRecord[] = JSON.parse(rawPaps);
+      let papsUpdated = false;
+      const updatedRecords = records.map((r) => {
+        if ((r.studentId === '1-1-21' || r.studentId === '1-2-17') && r.gender !== '남') {
+          papsUpdated = true;
+          return { ...r, gender: '남' as const };
+        }
+        return r;
+      });
+      if (papsUpdated) {
+        localStorage.setItem(STORAGE_KEYS.PAPS_RECORDS, JSON.stringify(updatedRecords));
+        updatedRecords
+          .filter((r) => r.studentId === '1-1-21' || r.studentId === '1-2-17')
+          .forEach((r) => {
+            setDoc(doc(db, 'paps_records', r.id), { gender: '남', updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
+          });
+      }
+    }
+  } catch (err) {
+    console.warn('ensureStudentProfilesUpToDate notice:', err);
   }
 }
 

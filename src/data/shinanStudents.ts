@@ -35,7 +35,7 @@ export const SHINAN_OFFICIAL_STUDENTS: OfficialStudentRosterItem[] = [
   { grade: 1, classNum: 1, studentNum: 18, name: '장범석', gender: '남' },
   { grade: 1, classNum: 1, studentNum: 19, name: '정찬주', gender: '남' },
   { grade: 1, classNum: 1, studentNum: 20, name: '조희우', gender: '남' },
-  { grade: 1, classNum: 1, studentNum: 21, name: '홍서현', gender: '여' },
+  { grade: 1, classNum: 1, studentNum: 21, name: '홍서현', gender: '남' },
 
   // -----------------------------
   // 1학년 2반 (18명)
@@ -55,7 +55,7 @@ export const SHINAN_OFFICIAL_STUDENTS: OfficialStudentRosterItem[] = [
   { grade: 1, classNum: 2, studentNum: 14, name: '이진혁', gender: '남' },
   { grade: 1, classNum: 2, studentNum: 15, name: '이채아', gender: '여' },
   { grade: 1, classNum: 2, studentNum: 16, name: '정솔비', gender: '여' },
-  { grade: 1, classNum: 2, studentNum: 17, name: '조하얀', gender: '여' },
+  { grade: 1, classNum: 2, studentNum: 17, name: '조하얀', gender: '남' },
   { grade: 1, classNum: 2, studentNum: 18, name: '주단비', gender: '여' },
   { grade: 1, classNum: 2, studentNum: 19, name: '최우진', gender: '남' },
 ];

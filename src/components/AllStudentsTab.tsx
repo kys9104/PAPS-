@@ -118,7 +118,12 @@ export const AllStudentsTab: React.FC<AllStudentsTabProps> = ({
           remoteStudents.forEach((s) => {
             if (s && s.id) {
               const base = map.get(s.id);
-              map.set(s.id, { ...base, ...s });
+              map.set(s.id, {
+                ...base,
+                ...s,
+                gender: base?.gender || s.gender || '남',
+                name: base?.name || s.name
+              });
             }
           });
           const merged = Array.from(map.values());
